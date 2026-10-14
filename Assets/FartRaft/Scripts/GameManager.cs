@@ -59,11 +59,11 @@ namespace FartRaft
         [Tooltip("How far below the slide surface the raft can drop before it counts as a fall.")]
         public float fallDepth = 5f;
         public Difficulty difficulty = Difficulty.Easy;
-        [Tooltip("Easy mode: right after an OUCH you are safe for this long (hits only bounce).")]
-        public float easySafeTime = 1.5f;
-        [Tooltip("Easy mode: a second spiky hit within this many seconds of an OUCH kills.")]
-        public float easyHitWindow = 3.5f;
-        public float easyHitBounce = 9f;
+        [Tooltip("Easy mode: after an OUCH the raft blinks and passes through spiky things for this long.")]
+        public float easySafeTime = 2f;
+        [Tooltip("Easy mode: a spiky hit after the blinking but within this many seconds of the OUCH kills.")]
+        public float easyHitWindow = 4f;
+        public float easyHitBounce = 3f;
 
         [Header("Stages")]
         public int stageIndex;
@@ -90,6 +90,7 @@ namespace FartRaft
         Transform respawnPoint;
         float messageHideTime;
         float lastWarningTime = -100f;
+        bool ghostActive;
         Coroutine routine;
 
         const string DifficultyKey = "difficulty";
@@ -145,12 +146,12 @@ namespace FartRaft
             raft.autoForward = easy ? 6f : 0f;
             raft.maxSpeed = easy ? 11f : 0f;
             raft.lockYaw = easy;
-            raft.sideDrag = easy ? 2.5f : 0f;
+            raft.sideDrag = easy ? 3.5f : 0f;
 
             foreach (var seat in seats)
             {
                 seat.thrust = easy ? 9f : 3f;
-                seat.startKick = easy ? 1.5f : 0.8f;
+                seat.startKick = 0.8f;
                 seat.instantAim = easy;
                 seat.drainPerSecond = easy ? 12f : 22f;
             }
@@ -305,10 +306,25 @@ namespace FartRaft
                 routine = StartCoroutine(Die(raft.transform.position, true));
             }
 
+            SetGhost(racing && !dying && Time.time - lastWarningTime < easySafeTime);
+
             UpdateHud();
             syncText.enabled = syncActive;
             if (hintText != null) hintText.enabled = raceTime < 8f;
             if (messageText.enabled && Time.time > messageHideTime) messageText.enabled = false;
+        }
+
+        void SetGhost(bool ghost)
+        {
+            if (ghost == ghostActive) return;
+            ghostActive = ghost;
+            Physics.IgnoreLayerCollision(raft.gameObject.layer, Hazard.Layer, ghost);
+            raft.SetBlinking(ghost);
+        }
+
+        void OnDestroy()
+        {
+            Physics.IgnoreLayerCollision(raft.gameObject.layer, Hazard.Layer, false);
         }
 
         public void OnHazard(Vector3 point)
@@ -318,16 +334,11 @@ namespace FartRaft
             if (difficulty == Difficulty.Easy)
             {
                 float since = Time.time - lastWarningTime;
-                if (since < easySafeTime)
-                {
-                    raft.Bounce(point, easyHitBounce * 0.5f);
-                    return;
-                }
+                if (since < easySafeTime) return;
                 if (since > easyHitWindow)
                 {
                     lastWarningTime = Time.time;
                     raft.Bounce(point, easyHitBounce);
-                    raft.PauseAutoForward(1f);
                     PlayImpact(point, 20);
                     Audio.Bump(10f);
                     ShowMessage("OUCH!", 1f);

@@ -6,6 +6,9 @@ namespace FartRaft
     // last checkpoint. Works for solid colliders (see Raft.OnCollisionEnter) and triggers.
     public class Hazard : MonoBehaviour
     {
+        // Physics layer of every hazard collider (set by the builder), so the raft can pass through them in Easy mode after an OUCH.
+        public const int Layer = 8;
+
         void OnTriggerEnter(Collider other)
         {
             if (Raft.IsRaft(other) && GameManager.Instance != null) GameManager.Instance.OnHazard(other.transform.position);

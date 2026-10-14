@@ -487,6 +487,10 @@ namespace FartRaft.EditorTools
 
             // Spiky things (buoys, spinners, pendulums) are deadly. Rocks and blocks only bump.
             stage.obstacles(obstacles, m, tr, random);
+            foreach (var hazard in obstacles.GetComponentsInChildren<Hazard>())
+            {
+                foreach (var t in hazard.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = Hazard.Layer;
+            }
 
             int[] checkpointSegments = stage.checkpoints;
             for (int i = 0; i < checkpointSegments.Length; i++)
@@ -1709,7 +1713,7 @@ namespace FartRaft.EditorTools
         class Mats
         {
             // Stage colors; every stage gets its own copy of these materials.
-            public readonly Material slideWater = Textured(stagePrefix + "SlideWater", WaterTexture(), new Color(1f, 1f, 1f), 0.6f);
+            public readonly Material slideWater = Textured(stagePrefix + "SlideWater", WaterTexture(), new Color(0.86f, 0.86f, 0.86f), 0.6f);
             public readonly Material slideBody = Lit(stagePrefix + "SlideBody", stage.slideBody, 0.3f);
             public readonly Material bumper = Lit(stagePrefix + "Bumper", stage.bumper, 0.3f);
             public readonly Material coral = Lit(stagePrefix + "Coral", stage.coral, 0.05f);

@@ -23,7 +23,7 @@ water slides high above the clouds.
 - **Difficulty** (tap **MODE** on the menu, the choice is remembered):
   - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer.
     Animals jump to the right spot instantly, farts are stronger, gas lasts longer, obstacles move slower
-    and top speed is capped. The first spiky hit only bounces you (**OUCH!**) and gives 1.5 s of safety; another hit within 3.5 seconds kills.
+    and top speed is capped. The first spiky hit only bounces you (**OUCH!**); then the raft blinks for 2 s and passes through spiky things. Another hit within 4 seconds of the OUCH (after the blinking) kills.
   - **HARD**: the original physics - no auto-forward, the raft spins freely, one spiky hit kills.
 - HUD: progress bar, timer, death counter and name tags over each animal.
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).

@@ -29,12 +29,14 @@ namespace FartRaft
 
         public Vector3 TrackForward { get; set; } = Vector3.forward;
 
-        float autoForwardPausedUntil;
+        bool blinking;
+        Renderer[] blinkRenderers;
 
-        // Stops the auto-forward push for a moment, so a bounce does not carry the raft straight back into the obstacle.
-        public void PauseAutoForward(float seconds)
+        public void SetBlinking(bool on)
         {
-            autoForwardPausedUntil = Time.time + seconds;
+            blinking = on;
+            if (blinkRenderers == null && visual != null) blinkRenderers = visual.GetComponentsInChildren<MeshRenderer>(true);
+            if (!on && blinkRenderers != null) foreach (var r in blinkRenderers) r.enabled = true;
         }
 
         [Header("Look")]
@@ -94,7 +96,7 @@ namespace FartRaft
             if (Grounded)
             {
                 Body.AddForce(-groundNormal * stickAcceleration, ForceMode.Acceleration);
-                if (autoForward > 0f && Time.time >= autoForwardPausedUntil) Body.AddForce(TrackForward * autoForward, ForceMode.Acceleration);
+                if (autoForward > 0f) Body.AddForce(TrackForward * autoForward, ForceMode.Acceleration);
                 if (sideDrag > 0f)
                 {
                     Vector3 side = flat - TrackForward * Vector3.Dot(flat, TrackForward);
@@ -128,6 +130,12 @@ namespace FartRaft
             }
 
             if (visual == null) return;
+
+            if (blinking && blinkRenderers != null)
+            {
+                bool show = Mathf.Repeat(Time.time * 8f, 1f) > 0.35f;
+                foreach (var r in blinkRenderers) r.enabled = show;
+            }
 
             float t = Time.time * bobSpeed;
             Quaternion bob = Quaternion.Euler(Mathf.Sin(t * 0.8f) * 2f, 0f, Mathf.Sin(t * 1.3f) * 2f);
