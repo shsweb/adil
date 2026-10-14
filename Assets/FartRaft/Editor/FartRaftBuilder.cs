@@ -1118,6 +1118,9 @@ namespace FartRaft.EditorTools
             manager.finishText = Label(finish, "FinishText", "FINISH!", 90, center, new Vector2(0f, 150f), new Vector2(1200f, 400f));
             manager.playAgainButton = MakeButton(finish, "PlayAgain", "PLAY AGAIN", center, new Vector2(-220f, -200f), new Vector2(380f, 140f), PlayerColors[2], 46);
             manager.finishMenuButton = MakeButton(finish, "BackToMenu", "MENU", center, new Vector2(220f, -200f), new Vector2(380f, 140f), PlayerColors[1], 46);
+
+            hud.gameObject.SetActive(false);
+            finish.gameObject.SetActive(false);
         }
 
         static TouchFartButton FartButton(Transform parent, int index, Vector2 anchor, Vector2 pos, FartSeat seat)
