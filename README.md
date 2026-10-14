@@ -25,6 +25,16 @@ phone and steer the same raft with fart power through a river obstacle course.
    To test real touch controls, install the **Unity Remote 5** app on your phone and pick it in
    *Project Settings > Editor > Device*.
 
+## Better graphics
+
+- **Fart Raft > 3. Upgrade Graphics To URP** installs the Universal Render Pipeline (click it again once the
+  install finishes), switches the project to it and rebuilds the scene with bloom, tonemapping and color grading.
+- To use real models, import a free nature pack (e.g. *EmbersStorm – Free Nature Pack*, or *Ultimate Nature – Starter*
+  for URP) and select `Assets/FartRaft/EnvironmentTheme`. Drag the pack's tree, bush, rock and flower prefabs into
+  the lists (and optionally a water/grass material), then run **Fart Raft > 2. Build Game Scene** again.
+  Adjust `Prop Scale` if the models are too big or small.
+- Rebuilding the scene replaces `Game.unity`, so make manual scene edits in a copy.
+
 ## Building for phones
 
 Install the modules in **Unity Hub > Installs > (your version) > Add modules**:
