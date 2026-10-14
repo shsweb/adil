@@ -16,6 +16,8 @@ phone and steer the same raft with fart power through a river obstacle course.
 ## Setup
 
 1. In Unity Hub create a new project with the **Universal 3D** template (or **3D (Built-In)**). Unity 2022.3 LTS or Unity 6 recommended.
+   If you create the project from the terminal with `Unity -createProject` instead, it has no packages, so add
+   `"com.unity.ugui": "2.0.0",` to the `dependencies` in `Packages/manifest.json` (use `1.0.0` on Unity 2022).
 2. Copy the `Assets/FartRaft` folder from this repo into your project's `Assets` folder.
 3. In Unity's top menu click **Fart Raft > 1. Configure Project For iOS and Android**.
 4. Click **Fart Raft > 2. Build Game Scene**. This generates the whole level, raft, characters and UI in `Assets/FartRaft/Scenes/Game.unity`.
