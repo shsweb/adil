@@ -264,10 +264,10 @@ namespace FartRaft.EditorTools
         {
             public readonly Material water = Lit("Water", new Color(0.12f, 0.62f, 0.78f), 0.92f);
             public readonly Material grass = Lit("Grass", new Color(0.45f, 0.78f, 0.32f), 0.1f);
-            public readonly Material rock = Lit("Rock", new Color(0.55f, 0.53f, 0.50f), 0.15f);
-            public readonly Material rock2 = Lit("Rock2", new Color(0.45f, 0.43f, 0.42f), 0.15f);
-            public readonly Material rock3 = Lit("Rock3", new Color(0.64f, 0.59f, 0.52f), 0.15f);
-            public readonly Material sand = Lit("Sand", new Color(0.93f, 0.84f, 0.62f), 0.05f);
+            public readonly Material rock = Lit("Rock", new Color(0.40f, 0.38f, 0.36f), 0.1f);
+            public readonly Material rock2 = Lit("Rock2", new Color(0.31f, 0.30f, 0.30f), 0.1f);
+            public readonly Material rock3 = Lit("Rock3", new Color(0.47f, 0.42f, 0.36f), 0.1f);
+            public readonly Material sand = Lit("Sand", new Color(0.86f, 0.76f, 0.54f), 0.05f);
             public readonly Material pine = Lit("Pine", new Color(0.13f, 0.45f, 0.30f), 0.1f);
             public readonly Material bush = Lit("Bush", new Color(0.25f, 0.58f, 0.22f), 0.1f);
             public readonly Material reed = Lit("Reed", new Color(0.50f, 0.65f, 0.25f), 0.1f);
