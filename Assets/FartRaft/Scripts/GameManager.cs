@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace FartRaft
@@ -10,6 +11,11 @@ namespace FartRaft
     {
         public static GameManager Instance { get; private set; }
         public static float ObstacleSpeed = 1f;
+
+        // Player count to start with right after a stage scene loads (0 = show the menu).
+        static int pendingPlayers;
+
+        public static string StageSceneName(int index) => "Stage" + (index + 1);
 
         [Header("Scene")]
         public Raft raft;
@@ -31,6 +37,9 @@ namespace FartRaft
         public Button threePlayersButton;
         public Button fourPlayersButton;
         public Button difficultyButton;
+        public Button stageButton;
+        public Text stageText;
+        public Button nextStageButton;
         public Text difficultyText;
         public Button playAgainButton;
         public Button finishMenuButton;
@@ -55,6 +64,10 @@ namespace FartRaft
         [Tooltip("Easy mode: a second spiky hit within this many seconds of an OUCH kills.")]
         public float easyHitWindow = 3.5f;
         public float easyHitBounce = 9f;
+
+        [Header("Stages")]
+        public int stageIndex;
+        public string[] stageNames = { "STAGE 1" };
 
         static readonly float[][] SeatAngles =
         {
@@ -107,6 +120,9 @@ namespace FartRaft
             finishMenuButton.onClick.AddListener(ShowMenu);
             hudMenuButton.onClick.AddListener(ShowMenu);
             if (difficultyButton != null) difficultyButton.onClick.AddListener(ToggleDifficulty);
+            if (stageButton != null) stageButton.onClick.AddListener(() => LoadStage((stageIndex + 1) % stageNames.Length, 0));
+            if (nextStageButton != null) nextStageButton.onClick.AddListener(() => LoadStage(stageIndex + 1, playerCount));
+            if (stageText != null) stageText.text = "STAGE " + (stageIndex + 1) + ": " + StageName + "  >";
 
             difficulty = (Difficulty)PlayerPrefs.GetInt(DifficultyKey, (int)difficulty);
             ApplyDifficulty();
@@ -150,7 +166,25 @@ namespace FartRaft
 
         void Start()
         {
-            ShowMenu();
+            if (pendingPlayers > 0)
+            {
+                int count = pendingPlayers;
+                pendingPlayers = 0;
+                StartGame(count);
+            }
+            else
+            {
+                ShowMenu();
+            }
+        }
+
+        string StageName => stageIndex < stageNames.Length ? stageNames[stageIndex] : "STAGE " + (stageIndex + 1);
+        bool HasNextStage => stageIndex + 1 < stageNames.Length;
+
+        void LoadStage(int index, int startWithPlayers)
+        {
+            pendingPlayers = startWithPlayers;
+            SceneManager.LoadScene(StageSceneName(index));
         }
 
         public void ShowMenu()
@@ -384,7 +418,7 @@ namespace FartRaft
             SetLocked(true);
             Audio.Cheer();
 
-            string key = "best_v3_" + difficulty + "_" + playerCount;
+            string key = "best_v3_" + StageSceneName(stageIndex) + "_" + difficulty + "_" + playerCount;
             float best = PlayerPrefs.GetFloat(key, float.MaxValue);
             bool record = raceTime < best;
             if (record)
@@ -394,8 +428,10 @@ namespace FartRaft
                 PlayerPrefs.Save();
             }
 
-            finishText.text = "FINISH!\nTime " + FormatTime(raceTime) + "   Deaths " + deaths + "\n" +
+            finishText.text = (HasNextStage ? "STAGE " + (stageIndex + 1) + " DONE!" : "YOU BEAT ALL STAGES!") +
+                              "\nTime " + FormatTime(raceTime) + "   Deaths " + deaths + "\n" +
                               (record ? "NEW BEST!" : "Best " + FormatTime(best));
+            if (nextStageButton != null) nextStageButton.gameObject.SetActive(HasNextStage);
             finishPanel.SetActive(true);
         }
 

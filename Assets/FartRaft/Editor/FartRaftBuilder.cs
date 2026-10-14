@@ -18,9 +18,7 @@ namespace FartRaft.EditorTools
         const string MaterialsFolder = Root + "/Materials";
         const string GeneratedFolder = Root + "/Generated";
         const string ScenesFolder = Root + "/Scenes";
-        const string ScenePath = ScenesFolder + "/Game.unity";
         const string ThemePath = Root + "/EnvironmentTheme.asset";
-        const string PostProcessingPath = GeneratedFolder + "/PostProcessing.asset";
 
         static readonly Color[] PlayerColors =
         {
@@ -70,21 +68,49 @@ namespace FartRaft.EditorTools
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             EnsureFolder(MaterialsFolder);
             EnsureFolder(ScenesFolder);
             AssetDatabase.DeleteAsset(GeneratedFolder);
             EnsureFolder(GeneratedFolder);
+            AssetDatabase.DeleteAsset(ScenesFolder + "/Game.unity");
+            // Generated meshes and the physics material are shared by all stages, so caches are reset only once.
             ResetCaches();
+
+            var buildScenes = new List<EditorBuildSettingsScene>();
+            for (int i = 0; i < Stages.Length; i++)
+            {
+                EditorUtility.DisplayProgressBar("Fart Raft", "Building stage " + (i + 1) + ": " + Stages[i].name, (float)i / Stages.Length);
+                string path = ScenesFolder + "/" + GameManager.StageSceneName(i) + ".unity";
+                BuildStage(i, path);
+                buildScenes.Add(new EditorBuildSettingsScene(path, true));
+            }
+            EditorUtility.ClearProgressBar();
+
+            EditorBuildSettings.scenes = buildScenes.ToArray();
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene(buildScenes[0].path);
+
+            EditorUtility.DisplayDialog("Fart Raft",
+                Stages.Length + " stages built and saved to " + ScenesFolder + ".\n\n" +
+                "Press Play. In the editor each player holds a direction (where the raft should go):\n" +
+                "P1: W A S D    P2: arrow keys    P3: I J K L    P4: numpad 8 4 5 6", "OK");
+        }
+
+        static void BuildStage(int index, string path)
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            stage = Stages[index];
+            stagePrefix = "S" + (index + 1) + "_";
+
             LoadUIResources();
             theme = LoadTheme();
 
             var m = new Mats();
-            var random = new System.Random(42);
+            var random = new System.Random(42 + index);
 
             SetupLighting();
-            var track = SampleTrack(Waypoints, 1f);
+            var track = SampleTrack(stage.waypoints, 1f);
             var course = BuildCourse(track, m, random, out Transform startPoint, out int checkpointCount);
             BuildEnvironment(track, course, m, random);
             OptimizeStatic(course);
@@ -105,17 +131,12 @@ namespace FartRaft.EditorTools
             manager.checkpointCount = checkpointCount;
             manager.impactEffect = BuildImpactEffect(m);
             manager.gameAudio = BuildGameAudio(managerGo);
+            manager.stageIndex = index;
+            manager.stageNames = Stages.Select(st => st.name).ToArray();
 
             BuildUI(manager, seats);
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
-            AssetDatabase.SaveAssets();
-
-            EditorUtility.DisplayDialog("Fart Raft",
-                "Scene built and saved to " + ScenePath + ".\n\n" +
-                "Press Play. In the editor each player holds a direction (where the raft should go):\n" +
-                "P1: W A S D    P2: arrow keys    P3: I J K L    P4: numpad 8 4 5 6", "OK");
+            EditorSceneManager.SaveScene(scene, path);
         }
 
         [MenuItem("Fart Raft/3. Upgrade Graphics To URP (Bloom, Color Grading)")]
@@ -199,36 +220,169 @@ namespace FartRaft.EditorTools
             }
         }
 
-        // The slide center line: x, height, z, width. Flat pools alternate with steep
-        // slides; the height never goes up, so the raft can never get stuck in a dip.
-        static readonly Waypoint[] Waypoints =
+        // A stage is one course: slide layout, walls, obstacles and colors.
+        class Stage
         {
-            new Waypoint(0f, 60f, -12f, 14f),     // start pool
-            new Waypoint(0f, 59.5f, 20f, 14f),
-            new Waypoint(6f, 52f, 50f, 11f),      // slide
-            new Waypoint(20f, 45f, 80f, 11f),
-            new Waypoint(28f, 44.5f, 110f, 17f),  // pool: buoys
-            new Waypoint(22f, 44f, 140f, 17f),    // pool: big spinner
-            new Waypoint(4f, 36.5f, 168f, 10f),   // narrow slide without walls
-            new Waypoint(-14f, 29f, 195f, 10f),   // slide: pendulums
-            new Waypoint(-22f, 28.5f, 225f, 16f), // canyon pool: rocks and sliding blocks
-            new Waypoint(-14f, 28f, 255f, 16f),
-            new Waypoint(0f, 21f, 282f, 11f),     // slide: spinners
-            new Waypoint(14f, 14.5f, 308f, 11f),
-            new Waypoint(16f, 14f, 340f, 16f),    // finish pool
+            public string name;
+            // The slide center line: x, height, z, width. Flat pools alternate with steep
+            // slides; the height never goes up, so the raft can never get stuck in a dip.
+            public Waypoint[] waypoints;
+            // Walls per segment (between waypoint i and i+1), one letter each:
+            // R = rocks, B = bumpers, O = open (you can fall off).
+            public string left, right;
+            public int[] checkpoints;
+            public int finishSegment;
+            public System.Action<Transform, Mats, Track, System.Random> obstacles;
+
+            public Color slideBody, bumper, coral, coral2, coral3, grass, leaves, leaves2;
+            public Color waterDeep, waterLight;
+            public Color skyTint, skyGround, fog, ambient, sun;
+        }
+
+        static Edge EdgeAt(string edges, int segment)
+        {
+            switch (edges[Mathf.Clamp(segment, 0, edges.Length - 1)])
+            {
+                case 'R': return Edge.Rock;
+                case 'B': return Edge.Bumper;
+                default: return Edge.Open;
+            }
+        }
+
+        static readonly Stage[] Stages =
+        {
+            new Stage
+            {
+                name = "SUNNY SLIDES",
+                waypoints = new[]
+                {
+                    new Waypoint(0f, 60f, -12f, 14f),     // start pool
+                    new Waypoint(0f, 59.5f, 20f, 14f),
+                    new Waypoint(6f, 52f, 50f, 11f),      // slide
+                    new Waypoint(20f, 45f, 80f, 11f),
+                    new Waypoint(28f, 44.5f, 110f, 17f),  // pool: buoys
+                    new Waypoint(22f, 44f, 140f, 17f),    // pool: big spinner
+                    new Waypoint(4f, 36.5f, 168f, 10f),   // narrow slide without walls
+                    new Waypoint(-14f, 29f, 195f, 10f),   // slide: pendulums
+                    new Waypoint(-22f, 28.5f, 225f, 16f), // canyon pool: rocks and sliding blocks
+                    new Waypoint(-14f, 28f, 255f, 16f),
+                    new Waypoint(0f, 21f, 282f, 11f),     // slide: spinners
+                    new Waypoint(14f, 14.5f, 308f, 11f),
+                    new Waypoint(16f, 14f, 340f, 16f),    // finish pool
+                },
+                left = "RBBBROBROBOR",
+                right = "RBOBROBRBBBR",
+                checkpoints = new[] { 2, 3, 5, 6, 7, 9, 10 },
+                finishSegment = 11,
+                obstacles = SunnyObstacles,
+                slideBody = new Color(0.30f, 0.78f, 0.72f),
+                bumper = new Color(0.62f, 0.32f, 0.85f),
+                coral = new Color(0.95f, 0.50f, 0.43f),
+                coral2 = new Color(0.98f, 0.64f, 0.50f),
+                coral3 = new Color(0.88f, 0.42f, 0.40f),
+                grass = new Color(0.50f, 0.80f, 0.30f),
+                leaves = new Color(0.30f, 0.62f, 0.25f),
+                leaves2 = new Color(0.45f, 0.72f, 0.25f),
+                waterDeep = new Color(0.16f, 0.62f, 0.94f),
+                waterLight = new Color(0.55f, 0.85f, 1f),
+                skyTint = new Color(0.42f, 0.62f, 0.95f),
+                skyGround = new Color(0.45f, 0.68f, 0.92f),
+                fog = new Color(0.55f, 0.75f, 0.95f),
+                ambient = new Color(0.75f, 0.85f, 1f),
+                sun = new Color(1f, 0.96f, 0.9f),
+            },
+            new Stage
+            {
+                name = "JUNGLE RAPIDS",
+                waypoints = new[]
+                {
+                    new Waypoint(0f, 70f, -12f, 14f),     // start pool
+                    new Waypoint(0f, 69.5f, 20f, 14f),
+                    new Waypoint(-8f, 62f, 48f, 11f),     // slide
+                    new Waypoint(-22f, 55f, 75f, 11f),
+                    new Waypoint(-26f, 54.5f, 105f, 16f), // pool: sliding blocks
+                    new Waypoint(-14f, 54f, 135f, 16f),   // pool: buoys
+                    new Waypoint(2f, 47f, 160f, 9f),      // narrow slide
+                    new Waypoint(18f, 40f, 185f, 9f),
+                    new Waypoint(26f, 39.5f, 215f, 17f),  // pool: big spinner
+                    new Waypoint(18f, 39f, 245f, 17f),    // pool: rocks
+                    new Waypoint(2f, 32f, 270f, 11f),     // slide: pendulums
+                    new Waypoint(-12f, 25f, 295f, 11f),
+                    new Waypoint(-18f, 24.5f, 325f, 16f), // pool: buoys
+                    new Waypoint(-10f, 24f, 355f, 16f),   // pool: spinner
+                    new Waypoint(4f, 17f, 380f, 11f),     // slide: spinners
+                    new Waypoint(14f, 10f, 405f, 11f),
+                    new Waypoint(14f, 9.5f, 435f, 16f),   // finish pool
+                },
+                left = "RBBRRBORRBORRBBR",
+                right = "RBBRRBBRRBBRRBOR",
+                checkpoints = new[] { 3, 5, 7, 9, 11, 13 },
+                finishSegment = 15,
+                obstacles = JungleObstacles,
+                slideBody = new Color(0.62f, 0.45f, 0.26f),
+                bumper = new Color(0.98f, 0.62f, 0.15f),
+                coral = new Color(0.42f, 0.55f, 0.30f),
+                coral2 = new Color(0.52f, 0.62f, 0.34f),
+                coral3 = new Color(0.36f, 0.47f, 0.28f),
+                grass = new Color(0.28f, 0.66f, 0.22f),
+                leaves = new Color(0.16f, 0.48f, 0.18f),
+                leaves2 = new Color(0.34f, 0.64f, 0.18f),
+                waterDeep = new Color(0.08f, 0.60f, 0.60f),
+                waterLight = new Color(0.45f, 0.90f, 0.80f),
+                skyTint = new Color(0.40f, 0.72f, 0.72f),
+                skyGround = new Color(0.30f, 0.58f, 0.50f),
+                fog = new Color(0.52f, 0.78f, 0.72f),
+                ambient = new Color(0.70f, 0.90f, 0.82f),
+                sun = new Color(1f, 0.95f, 0.80f),
+            },
+            new Stage
+            {
+                name = "VOLCANO RUN",
+                waypoints = new[]
+                {
+                    new Waypoint(0f, 80f, -12f, 13f),     // start pool
+                    new Waypoint(0f, 79.5f, 18f, 13f),
+                    new Waypoint(10f, 71f, 45f, 10f),     // steep slide: pendulum, buoys
+                    new Waypoint(24f, 62f, 72f, 10f),
+                    new Waypoint(30f, 61.5f, 100f, 15f),  // pool: spinner
+                    new Waypoint(22f, 61f, 128f, 15f),    // pool: sliding blocks
+                    new Waypoint(6f, 53f, 152f, 9f),      // narrow slide: spinner, pendulums
+                    new Waypoint(-10f, 45f, 176f, 9f),
+                    new Waypoint(-20f, 44.5f, 204f, 15f), // pool: buoys and rocks
+                    new Waypoint(-12f, 44f, 232f, 15f),   // pool: four-arm spinner
+                    new Waypoint(4f, 36f, 256f, 10f),     // slide: pendulums
+                    new Waypoint(18f, 28f, 280f, 10f),
+                    new Waypoint(24f, 27.5f, 308f, 16f),  // pool: big spinner
+                    new Waypoint(16f, 27f, 336f, 16f),    // pool: blocks and buoys
+                    new Waypoint(0f, 19f, 360f, 10f),     // slide: spinners, pendulum
+                    new Waypoint(-12f, 11f, 384f, 10f),
+                    new Waypoint(-14f, 10.5f, 414f, 16f), // finish pool
+                },
+                left = "RBBRRBORRBBRRBBR",
+                right = "RBORRBBRROBRRBOR",
+                checkpoints = new[] { 2, 3, 5, 6, 7, 9, 11, 13 },
+                finishSegment = 15,
+                obstacles = VolcanoObstacles,
+                slideBody = new Color(0.36f, 0.31f, 0.33f),
+                bumper = new Color(0.95f, 0.32f, 0.16f),
+                coral = new Color(0.32f, 0.27f, 0.28f),
+                coral2 = new Color(0.42f, 0.31f, 0.28f),
+                coral3 = new Color(0.24f, 0.21f, 0.23f),
+                grass = new Color(0.90f, 0.42f, 0.12f),
+                leaves = new Color(0.38f, 0.26f, 0.20f),
+                leaves2 = new Color(0.55f, 0.32f, 0.16f),
+                waterDeep = new Color(0.10f, 0.48f, 0.88f),
+                waterLight = new Color(0.50f, 0.78f, 1f),
+                skyTint = new Color(0.95f, 0.50f, 0.35f),
+                skyGround = new Color(0.55f, 0.26f, 0.22f),
+                fog = new Color(0.85f, 0.52f, 0.42f),
+                ambient = new Color(1f, 0.78f, 0.66f),
+                sun = new Color(1f, 0.78f, 0.58f),
+            },
         };
 
-        // Walls per segment (between waypoint i and i+1). Open edges let you fall off.
-        static readonly Edge[] LeftEdges =
-        {
-            Edge.Rock, Edge.Bumper, Edge.Bumper, Edge.Bumper, Edge.Rock, Edge.Open,
-            Edge.Bumper, Edge.Rock, Edge.Open, Edge.Bumper, Edge.Open, Edge.Rock,
-        };
-        static readonly Edge[] RightEdges =
-        {
-            Edge.Rock, Edge.Bumper, Edge.Open, Edge.Bumper, Edge.Rock, Edge.Open,
-            Edge.Bumper, Edge.Rock, Edge.Bumper, Edge.Bumper, Edge.Bumper, Edge.Rock,
-        };
+        static Stage stage;
+        static string stagePrefix = "";
 
         class Track
         {
@@ -332,7 +486,27 @@ namespace FartRaft.EditorTools
             obstacles.SetParent(course, false);
 
             // Spiky things (buoys, spinners, pendulums) are deadly. Rocks and blocks only bump.
+            stage.obstacles(obstacles, m, tr, random);
 
+            int[] checkpointSegments = stage.checkpoints;
+            for (int i = 0; i < checkpointSegments.Length; i++)
+            {
+                BuildCheckpoint(course, m, tr, tr.IndexAt(checkpointSegments[i], 0.04f), i);
+            }
+            checkpointCount = checkpointSegments.Length;
+
+            BuildStartArch(course, m, tr, 12);
+            BuildFinish(course, m, tr, tr.IndexAt(stage.finishSegment, 0.6f));
+
+            start = new GameObject("StartPoint").transform;
+            start.SetParent(course, false);
+            start.position = tr.pos[6] + Vector3.up * 0.9f;
+            start.rotation = Quaternion.LookRotation(tr.forward[6]);
+            return course;
+        }
+
+        static void SunnyObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
+        {
             // Segment 3: pool with spiky buoys.
             Buoy(obstacles, m, tr, tr.IndexAt(3, 0.35f), -3.5f);
             Buoy(obstacles, m, tr, tr.IndexAt(3, 0.55f), 3.5f);
@@ -358,22 +532,79 @@ namespace FartRaft.EditorTools
             // Segment 9: slide with two counter-rotating spinners.
             CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.35f), 3.8f, 2, 50f);
             CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.75f), 3.8f, 2, -50f);
+        }
 
-            int[] checkpointSegments = { 2, 3, 5, 6, 7, 9, 10 };
-            for (int i = 0; i < checkpointSegments.Length; i++)
-            {
-                BuildCheckpoint(course, m, tr, tr.IndexAt(checkpointSegments[i], 0.04f), i);
-            }
-            checkpointCount = checkpointSegments.Length;
+        static void JungleObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
+        {
+            Buoy(obstacles, m, tr, tr.IndexAt(2, 0.50f), 2.5f);
 
-            BuildStartArch(course, m, tr, 12);
-            BuildFinish(course, m, tr, tr.IndexAt(11, 0.6f));
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(3, 0.45f), 0f);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(3, 0.85f), 0.5f);
 
-            start = new GameObject("StartPoint").transform;
-            start.SetParent(course, false);
-            start.position = tr.pos[6] + Vector3.up * 0.9f;
-            start.rotation = Quaternion.LookRotation(tr.forward[6]);
-            return course;
+            Buoy(obstacles, m, tr, tr.IndexAt(4, 0.30f), -3f);
+            Buoy(obstacles, m, tr, tr.IndexAt(4, 0.50f), 3f);
+            Buoy(obstacles, m, tr, tr.IndexAt(4, 0.75f), 0f);
+
+            Buoy(obstacles, m, tr, tr.IndexAt(5, 0.50f), -2f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(7, 0.55f), 4.5f, 3, 35f);
+
+            WaterRock(obstacles, m, tr, tr.IndexAt(8, 0.30f), -3.5f, random);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(8, 0.60f), 0.25f);
+            WaterRock(obstacles, m, tr, tr.IndexAt(8, 0.85f), 3.5f, random);
+
+            PendulumArch(obstacles, m, tr, tr.IndexAt(9, 0.35f), 0f);
+            PendulumArch(obstacles, m, tr, tr.IndexAt(9, 0.70f), 0.5f);
+
+            Buoy(obstacles, m, tr, tr.IndexAt(11, 0.35f), 3f);
+            Buoy(obstacles, m, tr, tr.IndexAt(11, 0.60f), -3f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(12, 0.50f), 3.8f, 2, 45f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(13, 0.35f), 3.8f, 2, 50f);
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(13, 0.75f), 3.8f, 2, -50f);
+
+            Buoy(obstacles, m, tr, tr.IndexAt(14, 0.50f), -2f);
+        }
+
+        static void VolcanoObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
+        {
+            PendulumArch(obstacles, m, tr, tr.IndexAt(1, 0.60f), 0f);
+
+            Buoy(obstacles, m, tr, tr.IndexAt(2, 0.40f), -2.5f);
+            Buoy(obstacles, m, tr, tr.IndexAt(2, 0.75f), 2f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(3, 0.60f), 4.2f, 3, 40f);
+
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(4, 0.35f), 0f);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(4, 0.70f), 0.5f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(5, 0.50f), 3.4f, 2, 55f);
+
+            PendulumArch(obstacles, m, tr, tr.IndexAt(6, 0.35f), 0f);
+            PendulumArch(obstacles, m, tr, tr.IndexAt(6, 0.70f), 0.5f);
+
+            Buoy(obstacles, m, tr, tr.IndexAt(7, 0.30f), 3f);
+            WaterRock(obstacles, m, tr, tr.IndexAt(7, 0.55f), -3f, random);
+            Buoy(obstacles, m, tr, tr.IndexAt(7, 0.80f), 2f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(8, 0.50f), 4.2f, 4, -35f);
+
+            PendulumArch(obstacles, m, tr, tr.IndexAt(9, 0.30f), 0.25f);
+            PendulumArch(obstacles, m, tr, tr.IndexAt(9, 0.65f), 0.75f);
+
+            Buoy(obstacles, m, tr, tr.IndexAt(10, 0.50f), 1.5f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(11, 0.55f), 4.5f, 3, 40f);
+
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(12, 0.30f), 0f);
+            Buoy(obstacles, m, tr, tr.IndexAt(12, 0.55f), -3f);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(12, 0.80f), 0.5f);
+
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(13, 0.35f), 3.6f, 2, 55f);
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(13, 0.75f), 3.6f, 2, -55f);
+
+            PendulumArch(obstacles, m, tr, tr.IndexAt(14, 0.50f), 0f);
         }
 
         static void BuildSlide(Track tr, Transform parent, Mats m)
@@ -460,10 +691,10 @@ namespace FartRaft.EditorTools
 
             for (int s = -1; s <= 1; s += 2)
             {
-                Edge[] edges = s < 0 ? LeftEdges : RightEdges;
+                string edges = s < 0 ? stage.left : stage.right;
                 for (int k = 0; k < tr.Count - 1; k++)
                 {
-                    Edge edge = edges[tr.segment[k]];
+                    Edge edge = EdgeAt(edges, tr.segment[k]);
                     if (edge == Edge.Bumper && k % 3 == 0)
                     {
                         BumperPiece(walls, m, tr.Edge(k, s), tr.Edge(Mathf.Min(k + 3, tr.Count - 1), s), tr.right[k] * s);
@@ -724,12 +955,12 @@ namespace FartRaft.EditorTools
             light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
             light.shadowStrength = 0.45f;
-            light.color = new Color(1f, 0.96f, 0.9f);
+            light.color = stage.sun;
             lightGo.transform.rotation = Quaternion.Euler(55f, -30f, 0f);
 
-            var sky = LoadOrCreateMaterial("Sky", Shader.Find("Skybox/Procedural"));
-            if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", new Color(0.42f, 0.62f, 0.95f));
-            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", new Color(0.45f, 0.68f, 0.92f));
+            var sky = LoadOrCreateMaterial(stagePrefix + "Sky", Shader.Find("Skybox/Procedural"));
+            if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", stage.skyTint);
+            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", stage.skyGround);
             if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.6f);
             if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.05f);
             if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.03f);
@@ -738,12 +969,12 @@ namespace FartRaft.EditorTools
             RenderSettings.skybox = sky;
             RenderSettings.sun = light;
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.75f, 0.85f, 1f);
+            RenderSettings.ambientSkyColor = stage.ambient;
             RenderSettings.ambientEquatorColor = new Color(0.78f, 0.80f, 0.82f);
             RenderSettings.ambientGroundColor = new Color(0.62f, 0.55f, 0.52f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.55f, 0.75f, 0.95f);
+            RenderSettings.fogColor = stage.fog;
             RenderSettings.fogStartDistance = 70f;
             RenderSettings.fogEndDistance = 260f;
         }
@@ -1332,17 +1563,20 @@ namespace FartRaft.EditorTools
             manager.twoPlayersButton = MakeButton(menu, "TwoPlayers", "2 PLAYERS", center, new Vector2(-180f, -10f), new Vector2(320f, 180f), PlayerColors[1], 44);
             manager.threePlayersButton = MakeButton(menu, "ThreePlayers", "3 PLAYERS", center, new Vector2(180f, -10f), new Vector2(320f, 180f), PlayerColors[2], 44);
             manager.fourPlayersButton = MakeButton(menu, "FourPlayers", "4 PLAYERS", center, new Vector2(540f, -10f), new Vector2(320f, 180f), PlayerColors[3], 44);
-            manager.difficultyButton = MakeButton(menu, "Difficulty", "MODE: EASY", center, new Vector2(0f, -195f), new Vector2(520f, 110f), new Color(0.15f, 0.2f, 0.3f, 0.9f), 44);
+            manager.stageButton = MakeButton(menu, "Stage", "STAGE 1", center, new Vector2(-300f, -195f), new Vector2(640f, 110f), new Color(0.15f, 0.2f, 0.3f, 0.9f), 40);
+            manager.stageText = manager.stageButton.GetComponentInChildren<Text>();
+            manager.difficultyButton = MakeButton(menu, "Difficulty", "MODE: EASY", center, new Vector2(330f, -195f), new Vector2(460f, 110f), new Color(0.15f, 0.2f, 0.3f, 0.9f), 40);
             manager.difficultyText = manager.difficultyButton.GetComponentInChildren<Text>();
-            Label(menu, "MenuHint", "Tap MODE to switch. EASY: raft goes by itself, just steer. HARD: like the real game.", 32, center, new Vector2(0f, -300f), new Vector2(1600f, 60f));
+            Label(menu, "MenuHint", "Tap STAGE to pick a course. Tap MODE: EASY = raft goes by itself, HARD = like the real game.", 32, center, new Vector2(0f, -300f), new Vector2(1600f, 60f));
             Label(menu, "MenuHint2", "Everyone plays on the same phone - each player gets a joystick in one corner.", 32, center, new Vector2(0f, -360f), new Vector2(1600f, 60f));
 
             // Finish
             var finish = Panel(root, "Finish", new Color(0f, 0f, 0f, 0.7f));
             manager.finishPanel = finish.gameObject;
             manager.finishText = Label(finish, "FinishText", "FINISH!", 84, center, new Vector2(0f, 150f), new Vector2(1400f, 400f));
-            manager.playAgainButton = MakeButton(finish, "PlayAgain", "PLAY AGAIN", center, new Vector2(-220f, -200f), new Vector2(380f, 140f), PlayerColors[2], 46);
-            manager.finishMenuButton = MakeButton(finish, "BackToMenu", "MENU", center, new Vector2(220f, -200f), new Vector2(380f, 140f), PlayerColors[1], 46);
+            manager.playAgainButton = MakeButton(finish, "PlayAgain", "PLAY AGAIN", center, new Vector2(-420f, -200f), new Vector2(380f, 140f), PlayerColors[1], 46);
+            manager.nextStageButton = MakeButton(finish, "NextStage", "NEXT STAGE", center, new Vector2(0f, -200f), new Vector2(380f, 140f), PlayerColors[2], 46);
+            manager.finishMenuButton = MakeButton(finish, "BackToMenu", "MENU", center, new Vector2(420f, -200f), new Vector2(380f, 140f), PlayerColors[0], 46);
 
             var flashRt = UIObject("Flash", root);
             Stretch(flashRt);
@@ -1474,10 +1708,18 @@ namespace FartRaft.EditorTools
 
         class Mats
         {
-            public readonly Material slideWater = Textured("SlideWater", WaterTexture(), new Color(1f, 1f, 1f), 0.6f);
-            public readonly Material slideBody = Lit("SlideBody", new Color(0.30f, 0.78f, 0.72f), 0.3f);
+            // Stage colors; every stage gets its own copy of these materials.
+            public readonly Material slideWater = Textured(stagePrefix + "SlideWater", WaterTexture(), new Color(1f, 1f, 1f), 0.6f);
+            public readonly Material slideBody = Lit(stagePrefix + "SlideBody", stage.slideBody, 0.3f);
+            public readonly Material bumper = Lit(stagePrefix + "Bumper", stage.bumper, 0.3f);
+            public readonly Material coral = Lit(stagePrefix + "Coral", stage.coral, 0.05f);
+            public readonly Material coral2 = Lit(stagePrefix + "Coral2", stage.coral2, 0.05f);
+            public readonly Material coral3 = Lit(stagePrefix + "Coral3", stage.coral3, 0.05f);
+            public readonly Material grass = Lit(stagePrefix + "Grass", stage.grass, 0.05f);
+            public readonly Material leaves = Lit(stagePrefix + "Leaves", stage.leaves, 0.05f);
+            public readonly Material leaves2 = Lit(stagePrefix + "Leaves2", stage.leaves2, 0.05f);
+
             public readonly Material foam = Lit("Foam", new Color(0.96f, 0.99f, 1f), 0.2f);
-            public readonly Material bumper = Lit("Bumper", new Color(0.62f, 0.32f, 0.85f), 0.3f);
             public readonly Material spike = Lit("Spike", new Color(0.96f, 0.96f, 0.94f), 0.3f);
             public readonly Material buoy = Lit("Buoy", new Color(1.00f, 0.48f, 0.15f), 0.35f);
             public readonly Material magenta = Lit("Magenta", new Color(0.90f, 0.32f, 0.62f), 0.3f);
@@ -1487,15 +1729,9 @@ namespace FartRaft.EditorTools
             public readonly Material bamboo = Lit("Bamboo", new Color(0.96f, 0.80f, 0.36f), 0.2f);
             public readonly Material signBlue = Lit("SignBlue", new Color(0.18f, 0.45f, 0.85f), 0.3f);
             public readonly Material signYellow = Lit("SignYellow", new Color(1.00f, 0.84f, 0.20f), 0.3f);
-            public readonly Material coral = Lit("Coral", new Color(0.95f, 0.50f, 0.43f), 0.05f);
-            public readonly Material coral2 = Lit("Coral2", new Color(0.98f, 0.64f, 0.50f), 0.05f);
-            public readonly Material coral3 = Lit("Coral3", new Color(0.88f, 0.42f, 0.40f), 0.05f);
-            public readonly Material grass = Lit("Grass", new Color(0.50f, 0.80f, 0.30f), 0.05f);
             public readonly Material rock = Lit("Rock", new Color(0.42f, 0.41f, 0.43f), 0.05f);
             public readonly Material rock2 = Lit("Rock2", new Color(0.33f, 0.33f, 0.36f), 0.05f);
             public readonly Material trunk = Lit("Trunk", new Color(0.45f, 0.30f, 0.18f), 0.05f);
-            public readonly Material leaves = Lit("Leaves", new Color(0.30f, 0.62f, 0.25f), 0.05f);
-            public readonly Material leaves2 = Lit("Leaves2", new Color(0.45f, 0.72f, 0.25f), 0.05f);
             public readonly Material pine = Lit("Pine", new Color(0.18f, 0.50f, 0.32f), 0.05f);
             public readonly Material bush = Lit("Bush", new Color(0.28f, 0.60f, 0.24f), 0.05f);
             public readonly Material mushroomCap = Lit("MushroomCap", new Color(0.90f, 0.20f, 0.20f), 0.3f);
@@ -1639,10 +1875,10 @@ namespace FartRaft.EditorTools
         // Cyan water with light flow streaks; every term repeats over the tile so it scrolls seamlessly.
         static Texture2D WaterTexture()
         {
-            Color deep = new Color(0.16f, 0.62f, 0.94f);
-            Color light = new Color(0.55f, 0.85f, 1f);
+            Color deep = stage.waterDeep;
+            Color light = stage.waterLight;
             Color streak = new Color(0.88f, 0.97f, 1f);
-            return SaveTexture("SlideWater", 256, (u, v) =>
+            return SaveTexture(stagePrefix + "SlideWater", 256, (u, v) =>
             {
                 float a = u * Mathf.PI * 2f, b = v * Mathf.PI * 2f;
                 float waves = Mathf.Sin(6f * a + 2f * Mathf.Sin(2f * b)) * Mathf.Cos(3f * b + 1.5f * Mathf.Sin(a));
@@ -1678,7 +1914,7 @@ namespace FartRaft.EditorTools
             if (volumeType == null || profileType == null) return;
 
             var profile = ScriptableObject.CreateInstance(profileType);
-            AssetDatabase.CreateAsset(profile, PostProcessingPath);
+            AssetDatabase.CreateAsset(profile, GeneratedFolder + "/" + stagePrefix + "PostProcessing.asset");
 
             AddOverride(profile, "UnityEngine.Rendering.Universal.Tonemapping", ("mode", "Neutral"));
             AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.4f), ("threshold", 1f), ("scatter", 0.6f));

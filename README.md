@@ -15,7 +15,11 @@ water slides high above the clouds.
 - Some parts of the slide have no walls: **fall off and you go back to the last checkpoint**.
 - When **everyone farts at the same time** you get a **SYNC BOOST**.
 - Each fart drains your gas ring. If it empties, you're out until it refills.
-- Course: 4 steep slides and 4 pools, 7 checkpoints and a finish line. Your best time is saved (per mode).
+- **3 stages**, picked with the **STAGE** button on the menu; **NEXT STAGE** on the finish screen goes to the next one:
+  1. **Sunny Slides**: 4 slides and 4 pools, 7 checkpoints. Warm-up.
+  2. **Jungle Rapids**: longer, with sliding blocks, more buoys and spinners. 6 checkpoints.
+  3. **Volcano Run**: steepest and busiest, with pendulums, four-arm spinners and more open edges. 8 checkpoints.
+- Your best time is saved per stage, mode and player count.
 - **Difficulty** (tap **MODE** on the menu, the choice is remembered):
   - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer.
     Animals jump to the right spot instantly, farts are stronger, gas lasts longer, obstacles move slower
@@ -32,7 +36,7 @@ water slides high above the clouds.
    `"com.unity.ugui": "2.0.0",` to the `dependencies` in `Packages/manifest.json` (use `1.0.0` on Unity 2022).
 2. Copy the `Assets/FartRaft` folder from this repo into your project's `Assets` folder.
 3. In Unity's top menu click **Fart Raft > 1. Configure Project For iOS and Android**.
-4. Click **Fart Raft > 2. Build Game Scene**. This generates the whole level, raft, characters and UI in `Assets/FartRaft/Scenes/Game.unity`.
+4. Click **Fart Raft > 2. Build Game Scene**. This generates all stages (course, raft, characters and UI) as `Assets/FartRaft/Scenes/Stage1.unity`, `Stage2.unity` and `Stage3.unity`, and adds them to the build.
 5. Press **Play**. Keyboard controls in the editor:
 
    | Player | Hold a direction (= joystick) |
@@ -56,7 +60,7 @@ folders before copying the new ones (removed scripts would otherwise stay behind
   for URP) and select `Assets/FartRaft/EnvironmentTheme`. Drag the pack's tree, bush, rock and flower prefabs into
   the lists (and optionally a water/grass material), then run **Fart Raft > 2. Build Game Scene** again.
   Adjust `Prop Scale` if the models are too big or small.
-- Rebuilding the scene replaces `Game.unity`, so make manual scene edits in a copy.
+- Rebuilding replaces the `Stage*.unity` scenes, so make manual scene edits in a copy.
 
 ## Building for phones
 
