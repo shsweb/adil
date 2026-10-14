@@ -31,11 +31,11 @@ one round inflatable raft, and fart it down floating water slides high above the
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
 - Modes: **Solo**, **2, 3 or 4 players**.
 - **CHARACTERS** on the menu: the camera zooms onto the raft and every player flips through animals with **< >**
-  (hippo, pig, penguin, duck, corgi, flamingo, T-Rex, seal, plus the classic capy, croc and gorilla). Each animal
-  has its own fart pitch and fart cloud color and does a happy dance when picked and at the finish. Picks are saved.
-  The animated models are free CC0 Gobkit models in `Characters/` (see `Characters/CREDITS.txt`) and need the
+  (capy, penguin, croc, gorilla). Each animal has its own fart pitch and fart cloud color and does a happy dance
+  when picked and at the finish. Picks are saved.
+  The animated penguin is a free CC0 Gobkit model in `Characters/` (see `Characters/CREDITS.txt`) and needs the
   **glTFast** package: *Window > Package Manager > + > Install package by name* > `com.unity.cloud.gltfast`.
-  Without it only the classic animals show up.
+  Without it the penguin does not show up.
 
 ## Setup
 
