@@ -359,7 +359,7 @@ namespace FartRaft.EditorTools
             CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.35f), 3.8f, 2, 50f);
             CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.75f), 3.8f, 2, -50f);
 
-            int[] checkpointSegments = { 3, 5, 7, 9 };
+            int[] checkpointSegments = { 2, 3, 5, 6, 7, 9, 10 };
             for (int i = 0; i < checkpointSegments.Length; i++)
             {
                 BuildCheckpoint(course, m, tr, tr.IndexAt(checkpointSegments[i], 0.04f), i);
@@ -1323,7 +1323,10 @@ namespace FartRaft.EditorTools
             manager.twoPlayersButton = MakeButton(menu, "TwoPlayers", "2 PLAYERS", center, new Vector2(-180f, -10f), new Vector2(320f, 180f), PlayerColors[1], 44);
             manager.threePlayersButton = MakeButton(menu, "ThreePlayers", "3 PLAYERS", center, new Vector2(180f, -10f), new Vector2(320f, 180f), PlayerColors[2], 44);
             manager.fourPlayersButton = MakeButton(menu, "FourPlayers", "4 PLAYERS", center, new Vector2(540f, -10f), new Vector2(320f, 180f), PlayerColors[3], 44);
-            Label(menu, "MenuHint", "Everyone plays on the same phone - each player gets a joystick in one corner.", 34, center, new Vector2(0f, -200f), new Vector2(1500f, 60f));
+            manager.difficultyButton = MakeButton(menu, "Difficulty", "MODE: EASY", center, new Vector2(0f, -195f), new Vector2(520f, 110f), new Color(0.15f, 0.2f, 0.3f, 0.9f), 44);
+            manager.difficultyText = manager.difficultyButton.GetComponentInChildren<Text>();
+            Label(menu, "MenuHint", "Tap MODE to switch. EASY: raft goes by itself, just steer. HARD: like the real game.", 32, center, new Vector2(0f, -300f), new Vector2(1600f, 60f));
+            Label(menu, "MenuHint2", "Everyone plays on the same phone - each player gets a joystick in one corner.", 32, center, new Vector2(0f, -360f), new Vector2(1600f, 60f));
 
             // Finish
             var finish = Panel(root, "Finish", new Color(0f, 0f, 0f, 0.7f));

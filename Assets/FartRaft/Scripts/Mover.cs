@@ -11,6 +11,7 @@ namespace FartRaft
 
         Rigidbody body;
         Vector3 start;
+        float clock;
 
         void Awake()
         {
@@ -22,7 +23,8 @@ namespace FartRaft
 
         void FixedUpdate()
         {
-            float t = (Mathf.Sin((Time.time / period + phase) * Mathf.PI * 2f) + 1f) * 0.5f;
+            clock += Time.fixedDeltaTime * GameManager.ObstacleSpeed;
+            float t = (Mathf.Sin((clock / period + phase) * Mathf.PI * 2f) + 1f) * 0.5f;
             body.MovePosition(start + offset * t);
         }
     }

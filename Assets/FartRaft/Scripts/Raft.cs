@@ -17,6 +17,16 @@ namespace FartRaft
         [Tooltip("Extra pull into the slide surface so the raft does not hop over bumps.")]
         public float stickAcceleration = 8f;
 
+        [Header("Easy-mode helpers (0 / off = original physics)")]
+        [Tooltip("Constant push (m/s²) down the track, so players only need to steer.")]
+        public float autoForward;
+        [Tooltip("Horizontal speed limit in m/s. 0 = no limit.")]
+        public float maxSpeed;
+        [Tooltip("Keep the raft facing down the track instead of spinning.")]
+        public bool lockYaw;
+
+        public Vector3 TrackForward { get; set; } = Vector3.forward;
+
         [Header("Look")]
         public float bobHeight = 0.05f;
         public float bobSpeed = 2.2f;
@@ -69,8 +79,29 @@ namespace FartRaft
             Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
             float speed = flat.magnitude;
             Body.AddForce(-flat * (linearDrag + quadraticDrag * speed), ForceMode.Acceleration);
+            if (maxSpeed > 0f && speed > maxSpeed) Body.AddForce(-flat / speed * ((speed - maxSpeed) * 4f), ForceMode.Acceleration);
 
-            if (Grounded) Body.AddForce(-groundNormal * stickAcceleration, ForceMode.Acceleration);
+            if (Grounded)
+            {
+                Body.AddForce(-groundNormal * stickAcceleration, ForceMode.Acceleration);
+                if (autoForward > 0f) Body.AddForce(TrackForward * autoForward, ForceMode.Acceleration);
+            }
+
+            if (lockYaw)
+            {
+                float targetYaw = Mathf.Atan2(TrackForward.x, TrackForward.z) * Mathf.Rad2Deg;
+                float error = Mathf.DeltaAngle(Body.rotation.eulerAngles.y, targetYaw);
+                Body.angularVelocity = new Vector3(0f, error * Mathf.Deg2Rad * 4f, 0f);
+            }
+        }
+
+        // Knock the raft away from a contact point (bumpers, and spiky things in Easy mode).
+        public void Bounce(Vector3 point, float strength)
+        {
+            Vector3 away = transform.position - point;
+            away.y = 0f;
+            if (away.sqrMagnitude < 0.001f) away = -transform.forward;
+            Body.AddForce(away.normalized * strength, ForceMode.VelocityChange);
         }
 
         void Update()
@@ -115,10 +146,7 @@ namespace FartRaft
             var bumper = collision.collider.GetComponentInParent<Bumper>();
             if (bumper == null) return;
 
-            Vector3 away = transform.position - point;
-            away.y = 0f;
-            if (away.sqrMagnitude < 0.001f) away = -transform.forward;
-            Body.AddForce(away.normalized * bumper.bounce, ForceMode.VelocityChange);
+            Bounce(point, bumper.bounce);
 
             if (manager != null)
             {

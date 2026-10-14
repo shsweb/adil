@@ -15,7 +15,12 @@ water slides high above the clouds.
 - Some parts of the slide have no walls: **fall off and you go back to the last checkpoint**.
 - When **everyone farts at the same time** you get a **SYNC BOOST**.
 - Each fart drains your gas ring. If it empties, you're out until it refills.
-- Course: 4 steep slides and 4 pools, 4 checkpoints and a finish line. Your best time is saved.
+- Course: 4 steep slides and 4 pools, 7 checkpoints and a finish line. Your best time is saved (per mode).
+- **Difficulty** (tap **MODE** on the menu, the choice is remembered):
+  - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer.
+    Animals jump to the right spot instantly, farts are stronger, gas lasts longer, obstacles move slower
+    and top speed is capped. The first spiky hit only bounces you (**OUCH!**); a second hit within 3 seconds kills.
+  - **HARD**: the original physics - no auto-forward, the raft spins freely, one spiky hit kills.
 - HUD: progress bar, timer, death counter and name tags over each animal.
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
 - Modes: **Solo**, **2, 3 or 4 players**.

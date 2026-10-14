@@ -4,9 +4,12 @@ using UnityEngine.UI;
 
 namespace FartRaft
 {
+    public enum Difficulty { Easy, Hard }
+
     public class GameManager : MonoBehaviour
     {
         public static GameManager Instance { get; private set; }
+        public static float ObstacleSpeed = 1f;
 
         [Header("Scene")]
         public Raft raft;
@@ -27,6 +30,8 @@ namespace FartRaft
         public Button twoPlayersButton;
         public Button threePlayersButton;
         public Button fourPlayersButton;
+        public Button difficultyButton;
+        public Text difficultyText;
         public Button playAgainButton;
         public Button finishMenuButton;
         public Button hudMenuButton;
@@ -43,6 +48,10 @@ namespace FartRaft
         public float syncBoost = 1.4f;
         [Tooltip("How far below the slide surface the raft can drop before it counts as a fall.")]
         public float fallDepth = 5f;
+        public Difficulty difficulty = Difficulty.Easy;
+        [Tooltip("Easy mode: a second spiky hit within this many seconds kills.")]
+        public float easyHitWindow = 3f;
+        public float easyHitBounce = 9f;
 
         static readonly float[][] SeatAngles =
         {
@@ -64,7 +73,10 @@ namespace FartRaft
         int progressIndex = -1;
         Transform respawnPoint;
         float messageHideTime;
+        float lastWarningTime = -100f;
         Coroutine routine;
+
+        const string DifficultyKey = "difficulty";
 
         public GameAudio Audio
         {
@@ -91,6 +103,45 @@ namespace FartRaft
             playAgainButton.onClick.AddListener(() => StartGame(playerCount));
             finishMenuButton.onClick.AddListener(ShowMenu);
             hudMenuButton.onClick.AddListener(ShowMenu);
+            if (difficultyButton != null) difficultyButton.onClick.AddListener(ToggleDifficulty);
+
+            difficulty = (Difficulty)PlayerPrefs.GetInt(DifficultyKey, (int)difficulty);
+            ApplyDifficulty();
+        }
+
+        void ToggleDifficulty()
+        {
+            difficulty = difficulty == Difficulty.Easy ? Difficulty.Hard : Difficulty.Easy;
+            PlayerPrefs.SetInt(DifficultyKey, (int)difficulty);
+            PlayerPrefs.Save();
+            ApplyDifficulty();
+        }
+
+        void ApplyDifficulty()
+        {
+            bool easy = difficulty == Difficulty.Easy;
+
+            raft.linearDrag = easy ? 1.2f : 0.18f;
+            raft.quadraticDrag = easy ? 0f : 0.012f;
+            raft.autoForward = easy ? 6f : 0f;
+            raft.maxSpeed = easy ? 11f : 0f;
+            raft.lockYaw = easy;
+
+            foreach (var seat in seats)
+            {
+                seat.thrust = easy ? 6f : 3f;
+                seat.startKick = easy ? 1.5f : 0.8f;
+                seat.instantAim = easy;
+                seat.drainPerSecond = easy ? 12f : 22f;
+            }
+
+            ObstacleSpeed = easy ? 0.6f : 1f;
+
+            if (difficultyText != null)
+            {
+                difficultyText.text = easy ? "MODE: EASY" : "MODE: HARD";
+                difficultyText.color = easy ? new Color(0.45f, 1f, 0.45f) : new Color(1f, 0.45f, 0.35f);
+            }
         }
 
         void Start()
@@ -127,6 +178,7 @@ namespace FartRaft
             raceTime = 0f;
             deaths = 0;
             nextCheckpoint = 0;
+            lastWarningTime = -100f;
             respawnPoint = startPoint;
             SetFlash(0f);
             SetLocked(true);
@@ -197,6 +249,11 @@ namespace FartRaft
 
             syncActive = racing && active >= 2 && farting == active;
             foreach (var seat in seats) seat.BoostMultiplier = syncActive ? syncBoost : 1f;
+
+            if (coursePath != null && coursePath.Length > 1)
+            {
+                raft.TrackForward = CoursePath.FlatDirection(coursePath, Mathf.Max(progressIndex, 0), 6);
+            }
         }
 
         void Update()
@@ -218,6 +275,23 @@ namespace FartRaft
         public void OnHazard(Vector3 point)
         {
             if (!racing || dying) return;
+
+            if (difficulty == Difficulty.Easy)
+            {
+                float since = Time.time - lastWarningTime;
+                // One obstacle often touches the raft several times in a row; that still counts as one hit.
+                if (since < 0.5f) return;
+                if (since > easyHitWindow)
+                {
+                    lastWarningTime = Time.time;
+                    raft.Bounce(point, easyHitBounce);
+                    PlayImpact(point, 20);
+                    Audio.Bump(10f);
+                    ShowMessage("OUCH!", 1f);
+                    return;
+                }
+            }
+
             routine = StartCoroutine(Die(point, false));
         }
 
@@ -301,7 +375,7 @@ namespace FartRaft
             SetLocked(true);
             Audio.Cheer();
 
-            string key = "best_v3_" + playerCount;
+            string key = "best_v3_" + difficulty + "_" + playerCount;
             float best = PlayerPrefs.GetFloat(key, float.MaxValue);
             bool record = raceTime < best;
             if (record)

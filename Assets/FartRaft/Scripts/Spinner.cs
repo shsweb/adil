@@ -18,7 +18,8 @@ namespace FartRaft
 
         void FixedUpdate()
         {
-            body.MoveRotation(body.rotation * Quaternion.Euler(0f, degreesPerSecond * Time.fixedDeltaTime, 0f));
+            float step = degreesPerSecond * GameManager.ObstacleSpeed * Time.fixedDeltaTime;
+            body.MoveRotation(body.rotation * Quaternion.Euler(0f, step, 0f));
         }
     }
 }

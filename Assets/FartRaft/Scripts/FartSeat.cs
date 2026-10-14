@@ -28,6 +28,8 @@ namespace FartRaft
         [Tooltip("Players can only fart once they are this close (degrees) to the right spot.")]
         public float aimTolerance = 50f;
         public float minGap = 32f;
+        [Tooltip("Jump straight to the right spot instead of running there (Easy mode).")]
+        public bool instantAim;
 
         [Header("Fart power")]
         [Tooltip("Acceleration (m/s²) one player gives the raft.")]
@@ -162,8 +164,16 @@ namespace FartRaft
             Vector3 localOutward = raft.transform.InverseTransformDirection(-moveDirection);
             float targetAngle = Mathf.Atan2(localOutward.x, localOutward.z) * Mathf.Rad2Deg;
 
-            angle = Mathf.MoveTowardsAngle(angle, targetAngle, runSpeed * Time.deltaTime);
-            aligned = Mathf.Abs(Mathf.DeltaAngle(angle, targetAngle)) < aimTolerance;
+            if (instantAim)
+            {
+                angle = Mathf.MoveTowardsAngle(angle, targetAngle, runSpeed * 3f * Time.deltaTime);
+                aligned = true;
+            }
+            else
+            {
+                angle = Mathf.MoveTowardsAngle(angle, targetAngle, runSpeed * Time.deltaTime);
+                aligned = Mathf.Abs(Mathf.DeltaAngle(angle, targetAngle)) < aimTolerance;
+            }
             power = Mathf.InverseLerp(stickDeadZone, 1f, stick.magnitude) * 0.5f + 0.5f;
         }
 

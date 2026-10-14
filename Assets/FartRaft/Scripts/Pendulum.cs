@@ -13,6 +13,7 @@ namespace FartRaft
 
         Rigidbody body;
         Quaternion baseRotation;
+        float clock;
 
         void Awake()
         {
@@ -24,7 +25,8 @@ namespace FartRaft
 
         void FixedUpdate()
         {
-            float angle = amplitude * Mathf.Sin((Time.time / period + phase) * Mathf.PI * 2f);
+            clock += Time.fixedDeltaTime * GameManager.ObstacleSpeed;
+            float angle = amplitude * Mathf.Sin((clock / period + phase) * Mathf.PI * 2f);
             body.MoveRotation(baseRotation * Quaternion.Euler(0f, 0f, angle));
         }
     }
