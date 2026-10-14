@@ -1,0 +1,10 @@
+Character models: Gobkit free packs (https://gobkit.itch.io/gobkit-free-animal-pack, https://gobkit.com)
+License: CC0 1.0 (public domain) - free for any use, no attribution required.
+
+Hippo, Corgi, Duck  - Gobkit Free Animal Pack Vol.1
+Seal                - Gobkit Free Animal Pack Vol.2
+Pig                 - Gobkit Free Animal Pack Vol.3
+Penguin, Flamingo   - Gobkit Free Bird Pack
+Trex                - Gobkit Free Dinosaur Pack
+
+These .glb files need the glTFast package (com.unity.cloud.gltfast) to import.

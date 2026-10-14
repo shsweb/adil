@@ -50,6 +50,13 @@ namespace FartRaft
         public Text finishText;
         public Text deathsText;
         public Text hintText;
+        public Text[] nameTags = new Text[4];
+        public Button charactersButton;
+        public GameObject characterPanel;
+        public Button charactersDoneButton;
+        public Text[] characterNames = new Text[4];
+        public Button[] characterPrevButtons = new Button[4];
+        public Button[] characterNextButtons = new Button[4];
         public Image progressFill;
         public Image flash;
 
@@ -80,7 +87,8 @@ namespace FartRaft
             new[] { 135f, 225f, 315f, 45f },
         };
         static readonly float[] PowerPerPlayer = { 1f, 0.8f, 0.7f, 0.62f };
-        static readonly string[] AnimalNames = { "CAPY", "HIPPO", "CROC", "GORILLA" };
+        // Character select: everyone stands on the far side of the raft, facing the camera.
+        static readonly float[] ShowcaseAngles = { 300f, 340f, 20f, 60f };
 
         int playerCount = 2;
         bool racing;
@@ -131,6 +139,59 @@ namespace FartRaft
 
             difficulty = (Difficulty)PlayerPrefs.GetInt(DifficultyKey, (int)difficulty);
             ApplyDifficulty();
+
+            if (charactersButton != null) charactersButton.onClick.AddListener(ShowCharacters);
+            if (charactersDoneButton != null) charactersDoneButton.onClick.AddListener(ShowMenu);
+            for (int i = 0; i < seats.Length; i++)
+            {
+                int player = i;
+                if (i < characterPrevButtons.Length && characterPrevButtons[i] != null) characterPrevButtons[i].onClick.AddListener(() => CycleCharacter(player, -1));
+                if (i < characterNextButtons.Length && characterNextButtons[i] != null) characterNextButtons[i].onClick.AddListener(() => CycleCharacter(player, 1));
+                int pick = CharacterRoster.Load(i);
+                if (!seats[i].HasCharacter(pick)) pick = CharacterRoster.Fallback(i);
+                seats[i].SetCharacter(pick);
+            }
+            UpdateCharacterLabels();
+        }
+
+        void ShowCharacters()
+        {
+            StopRoutine();
+            menuPanel.SetActive(false);
+            if (characterPanel != null) characterPanel.SetActive(true);
+            for (int i = 0; i < seats.Length; i++)
+            {
+                seats[i].gameObject.SetActive(true);
+                seats[i].SetAngle(ShowcaseAngles[i]);
+            }
+            if (cameraFollow != null) cameraFollow.closeUp = true;
+        }
+
+        void CycleCharacter(int player, int direction)
+        {
+            var seat = seats[player];
+            int count = CharacterRoster.All.Length;
+            int index = seat.CharacterIndex;
+            for (int step = 0; step < count; step++)
+            {
+                index = (index + direction + count) % count;
+                if (seat.HasCharacter(index)) break;
+            }
+            seat.SetCharacter(index);
+            seat.Cheer();
+            CharacterRoster.Save(player, index);
+            UpdateCharacterLabels();
+        }
+
+        void UpdateCharacterLabels()
+        {
+            for (int i = 0; i < seats.Length; i++)
+            {
+                string name = seats[i].CharacterName;
+                if (i < characterNames.Length && characterNames[i] != null) characterNames[i].text = name;
+                if (i < nameTags.Length && nameTags[i] != null) nameTags[i].text = name;
+                if (i < joysticks.Length && joysticks[i] != null) joysticks[i].SetLabel(name);
+            }
         }
 
         void ToggleDifficulty()
@@ -202,6 +263,8 @@ namespace FartRaft
             menuPanel.SetActive(true);
             hudPanel.SetActive(false);
             finishPanel.SetActive(false);
+            if (characterPanel != null) characterPanel.SetActive(false);
+            if (cameraFollow != null) cameraFollow.closeUp = false;
             ConfigureSeats();
             ResetRaft(startPoint);
         }
@@ -214,6 +277,8 @@ namespace FartRaft
 
             menuPanel.SetActive(false);
             finishPanel.SetActive(false);
+            if (characterPanel != null) characterPanel.SetActive(false);
+            if (cameraFollow != null) cameraFollow.closeUp = false;
             hudPanel.SetActive(true);
 
             racing = false;
@@ -263,7 +328,7 @@ namespace FartRaft
                 seats[i].SetAngle(angles[i]);
                 seats[i].thrustScale = PowerPerPlayer[playerCount - 1];
                 seats[i].ResetGas();
-                joysticks[i].SetLabel(AnimalNames[i]);
+                joysticks[i].SetLabel(seats[i].CharacterName);
             }
         }
 
@@ -445,6 +510,10 @@ namespace FartRaft
             racing = false;
             SetLocked(true);
             Audio.Cheer();
+            foreach (var seat in seats)
+            {
+                if (seat.gameObject.activeSelf) seat.Cheer();
+            }
 
             string key = "best_v3_" + StageSceneName(stageIndex) + "_" + difficulty + "_" + playerCount;
             float best = PlayerPrefs.GetFloat(key, float.MaxValue);

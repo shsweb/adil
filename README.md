@@ -1,8 +1,7 @@
 # Fart Raft (Unity, iOS + Android)
 
-A mobile party game prototype inspired by *Fart Together*: 2-4 animals (capybara, hippo,
-croc, gorilla) share one phone and one round inflatable raft, and fart it down floating
-water slides high above the clouds.
+A mobile party game prototype inspired by *Fart Together*: 2-4 animals share one phone and
+one round inflatable raft, and fart it down floating water slides high above the clouds.
 
 ## Gameplay
 
@@ -31,6 +30,12 @@ water slides high above the clouds.
 - HUD: progress bar, timer, death counter and name tags over each animal.
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
 - Modes: **Solo**, **2, 3 or 4 players**.
+- **CHARACTERS** on the menu: the camera zooms onto the raft and every player flips through animals with **< >**
+  (hippo, pig, penguin, duck, corgi, flamingo, T-Rex, seal, plus the classic capy, croc and gorilla). Each animal
+  has its own fart pitch and fart cloud color and does a happy dance when picked and at the finish. Picks are saved.
+  The animated models are free CC0 Gobkit models in `Characters/` (see `Characters/CREDITS.txt`) and need the
+  **glTFast** package: *Window > Package Manager > + > Install package by name* > `com.unity.cloud.gltfast`.
+  Without it only the classic animals show up.
 
 ## Setup
 
@@ -44,10 +49,10 @@ water slides high above the clouds.
 
    | Player | Hold a direction (= joystick) |
    | --- | --- |
-   | 1 (Capy) | W A S D |
-   | 2 (Hippo) | Arrow keys |
-   | 3 (Croc) | I J K L |
-   | 4 (Gorilla) | Numpad 8 4 5 6 |
+   | 1 | W A S D |
+   | 2 | Arrow keys |
+   | 3 | I J K L |
+   | 4 | Numpad 8 4 5 6 |
 
 When updating an existing project, delete the old `Assets/FartRaft/Scripts` and `Assets/FartRaft/Editor`
 folders before copying the new ones (removed scripts would otherwise stay behind and break compiling).

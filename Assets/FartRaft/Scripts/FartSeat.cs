@@ -18,6 +18,8 @@ namespace FartRaft
         public ParticleSystem fartParticles;
         public AudioSource fartAudio;
         public AudioClip[] fartClips;
+        [Tooltip("One entry per CharacterRoster.All character; empty when that model was not imported.")]
+        public CharacterSkin[] skins;
 
         [Header("Position on the rim")]
         public float rimRadius = 2.1f;
@@ -55,14 +57,19 @@ namespace FartRaft
         public bool WantsToFart { get; private set; }
         public bool IsExhausted => exhausted;
         public float Gas01 => gas / maxGas;
+        public int CharacterIndex { get; private set; } = -1;
+        public string CharacterName => CharacterIndex >= 0 ? CharacterRoster.All[CharacterIndex].name : "";
 
         float gas;
+        float voicePitch = 1f;
+        CharacterSkin skin;
         bool exhausted;
         bool wasFarting;
         bool fartingLastStep;
         bool aligned;
         float power;
         float lean;
+        float cheerUntil = -100f;
         Camera cam;
 
         void Awake()
@@ -84,6 +91,50 @@ namespace FartRaft
         {
             gas = maxGas;
             exhausted = false;
+        }
+
+        public bool HasCharacter(int index) =>
+            skins != null && index >= 0 && index < skins.Length && skins[index] != null;
+
+        public void SetCharacter(int index)
+        {
+            if (!HasCharacter(index)) return;
+            CharacterIndex = index;
+            for (int i = 0; i < skins.Length; i++)
+            {
+                if (skins[i] != null) skins[i].gameObject.SetActive(i == index);
+            }
+            skin = skins[index];
+            leftArm = skin.leftArm;
+            rightArm = skin.rightArm;
+
+            var info = CharacterRoster.All[index];
+            voicePitch = info.pitch;
+            if (fartParticles != null)
+            {
+                var main = fartParticles.main;
+                main.startColor = new ParticleSystem.MinMaxGradient(
+                    new Color(info.puff.r, info.puff.g, info.puff.b, 0.95f),
+                    new Color(Mathf.Lerp(info.puff.r, 1f, 0.35f), Mathf.Lerp(info.puff.g, 1f, 0.35f), Mathf.Lerp(info.puff.b, 1f, 0.35f), 0.85f));
+            }
+        }
+
+        // Happy dance with a fart, used when the character is picked and at the finish.
+        public void Cheer()
+        {
+            if (skin != null) skin.Cheer();
+            cheerUntil = Time.time + 1.2f;
+            if (fartParticles != null) fartParticles.Emit(14);
+            if (fartAudio != null)
+            {
+                if (fartClips != null && fartClips.Length > 0)
+                {
+                    fartAudio.clip = fartClips[Random.Range(0, fartClips.Length)];
+                    fartAudio.pitch = Random.Range(0.95f, 1.05f) * voicePitch;
+                    fartAudio.volume = 1f;
+                    fartAudio.Play();
+                }
+            }
         }
 
         public void SetAngle(float degrees)
@@ -201,7 +252,13 @@ namespace FartRaft
             float wobble = IsFarting ? Mathf.Sin(t * 38f) * 0.05f : 0f;
             float idle = Mathf.Sin(t * 3f + playerIndex) * 0.02f;
             float run = WantsToFart && !aligned ? Mathf.Abs(Mathf.Sin(t * 25f)) * 0.08f : 0f;
-            character.localPosition = new Vector3(0f, run, 0f);
+            float hop = Time.time < cheerUntil ? Mathf.Abs(Mathf.Sin((cheerUntil - t) * 10f)) * 0.35f : 0f;
+            character.localPosition = new Vector3(0f, run + hop, 0f);
+
+            if (skin != null)
+            {
+                skin.SetMove(IsFarting ? CharacterSkin.Move.Fart : run > 0f || (WantsToFart && !aligned) ? CharacterSkin.Move.Run : CharacterSkin.Move.Idle);
+            }
             character.localRotation = Quaternion.Euler(lean * 25f, 0f, 0f);
             character.localScale = new Vector3(1f + lean * 0.1f + wobble, 1f - lean * 0.12f + idle, 1f + lean * 0.1f - wobble);
 
@@ -228,6 +285,7 @@ namespace FartRaft
             {
                 if (fartAudio.loop)
                 {
+                    fartAudio.pitch = voicePitch;
                     if (!fartAudio.isPlaying) fartAudio.Play();
                     fartAudio.volume = Mathf.MoveTowards(fartAudio.volume, IsFarting ? 0.7f : 0f, Time.deltaTime * 6f);
                 }
@@ -236,12 +294,12 @@ namespace FartRaft
                     if (!fartAudio.isPlaying || !wasFarting)
                     {
                         fartAudio.clip = fartClips[Random.Range(0, fartClips.Length)];
-                        fartAudio.pitch = Random.Range(0.92f, 1.12f) + playerIndex * 0.06f;
+                        fartAudio.pitch = Random.Range(0.92f, 1.12f) * voicePitch;
                         fartAudio.volume = 1f;
                         fartAudio.Play();
                     }
                 }
-                else if (fartAudio.isPlaying)
+                else if (fartAudio.isPlaying && Time.time >= cheerUntil)
                 {
                     fartAudio.volume = Mathf.MoveTowards(fartAudio.volume, 0f, Time.deltaTime * 8f);
                     if (fartAudio.volume <= 0f) fartAudio.Stop();

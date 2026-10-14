@@ -15,7 +15,14 @@ namespace FartRaft
         public float positionSmoothing = 5f;
         public float rotationSmoothing = 2.5f;
 
+        [Header("Close-up (character select)")]
+        public bool closeUp;
+        public float closeDistance = 4.6f;
+        public float closeHeight = 3.2f;
+        public float closeFocusHeight = 0.9f;
+
         float yaw;
+        float closeBlend;
         int pathIndex = -1;
 
         void LateUpdate()
@@ -23,12 +30,24 @@ namespace FartRaft
             if (target == null) return;
 
             float dt = Time.deltaTime;
+            closeBlend = Mathf.MoveTowards(closeBlend, closeUp ? 1f : 0f, dt * 2.5f);
             yaw = Mathf.LerpAngle(yaw, TargetYaw(), 1f - Mathf.Exp(-rotationSmoothing * dt));
             Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
-            Vector3 desired = target.position + rotation * new Vector3(0f, height, -distance);
 
-            transform.position = Vector3.Lerp(transform.position, desired, 1f - Mathf.Exp(-positionSmoothing * dt));
-            transform.LookAt(target.position + rotation * Vector3.forward * lookAhead);
+            transform.position = Vector3.Lerp(transform.position, Desired(rotation), 1f - Mathf.Exp(-positionSmoothing * dt));
+            transform.LookAt(LookPoint(rotation));
+        }
+
+        Vector3 Desired(Quaternion rotation)
+        {
+            float k = Mathf.SmoothStep(0f, 1f, closeBlend);
+            return target.position + rotation * new Vector3(0f, Mathf.Lerp(height, closeHeight, k), -Mathf.Lerp(distance, closeDistance, k));
+        }
+
+        Vector3 LookPoint(Quaternion rotation)
+        {
+            float k = Mathf.SmoothStep(0f, 1f, closeBlend);
+            return target.position + rotation * Vector3.forward * (lookAhead * (1f - k)) + Vector3.up * (closeFocusHeight * k);
         }
 
         float TargetYaw()
@@ -44,9 +63,10 @@ namespace FartRaft
             if (target == null) return;
             pathIndex = -1;
             yaw = TargetYaw();
+            closeBlend = closeUp ? 1f : 0f;
             Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
-            transform.position = target.position + rotation * new Vector3(0f, height, -distance);
-            transform.LookAt(target.position + rotation * Vector3.forward * lookAhead);
+            transform.position = Desired(rotation);
+            transform.LookAt(LookPoint(rotation));
         }
     }
 }

@@ -35,6 +35,7 @@ namespace FartRaft.EditorTools
             prefabPaths = null;
             convertedMaterials.Clear();
             convertedCounter = 0;
+            loggedCharacters = -1;
         }
 
         // All prefabs whose lower-case path contains every one of the given parts.
