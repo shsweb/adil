@@ -11,12 +11,13 @@ namespace FartRaft
         [Header("Scene")]
         public Raft raft;
         public FartSeat[] seats = new FartSeat[4];
-        public TouchFartButton[] buttons = new TouchFartButton[4];
+        public FartJoystick[] joysticks = new FartJoystick[4];
         public Transform startPoint;
         public CameraFollow cameraFollow;
         public Vector3[] coursePath;
-        public int checkpointCount = 3;
+        public int checkpointCount = 4;
         public ParticleSystem impactEffect;
+        public GameAudio gameAudio;
 
         [Header("UI")]
         public GameObject menuPanel;
@@ -33,43 +34,61 @@ namespace FartRaft
         public Text messageText;
         public Text syncText;
         public Text finishText;
-        public Text fallsText;
+        public Text deathsText;
         public Image progressFill;
+        public Image flash;
 
         [Header("Rules")]
         [Tooltip("Thrust multiplier while every player farts at the same time.")]
-        public float syncBoost = 1.5f;
-        [Tooltip("How far below the last checkpoint the raft can drop before it counts as a fall.")]
-        public float fallDepth = 10f;
+        public float syncBoost = 1.4f;
+        [Tooltip("How far below the slide surface the raft can drop before it counts as a fall.")]
+        public float fallDepth = 5f;
 
-        static readonly float[] TwoSeatAngles = { 215f, 145f };
-        static readonly float[] ThreeSeatAngles = { 230f, 130f, 180f };
-        static readonly float[] FourSeatAngles = { 225f, 135f, 315f, 45f };
+        static readonly float[][] SeatAngles =
+        {
+            new[] { 180f },
+            new[] { 135f, 225f },
+            new[] { 180f, 60f, 300f },
+            new[] { 135f, 225f, 315f, 45f },
+        };
+        static readonly float[] PowerPerPlayer = { 1f, 0.8f, 0.7f, 0.62f };
         static readonly string[] AnimalNames = { "CAPY", "HIPPO", "CROC", "GORILLA" };
 
         int playerCount = 2;
-        bool solo;
         bool racing;
+        bool dying;
         bool syncActive;
         float raceTime;
-        int falls;
+        int deaths;
         int nextCheckpoint;
         int progressIndex = -1;
         Transform respawnPoint;
         float messageHideTime;
-        Coroutine countdown;
+        Coroutine routine;
+
+        public GameAudio Audio
+        {
+            get
+            {
+                if (gameAudio == null) gameAudio = GetComponent<GameAudio>();
+                if (gameAudio == null) gameAudio = gameObject.AddComponent<GameAudio>();
+                return gameAudio;
+            }
+        }
 
         void Awake()
         {
             Instance = this;
             Application.targetFrameRate = 60;
+            QualitySettings.vSyncCount = 0;
+            Time.fixedDeltaTime = 1f / 60f;
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
-            soloButton.onClick.AddListener(() => StartGame(2, true));
-            twoPlayersButton.onClick.AddListener(() => StartGame(2, false));
-            threePlayersButton.onClick.AddListener(() => StartGame(3, false));
-            fourPlayersButton.onClick.AddListener(() => StartGame(4, false));
-            playAgainButton.onClick.AddListener(() => StartGame(playerCount, solo));
+            soloButton.onClick.AddListener(() => StartGame(1));
+            twoPlayersButton.onClick.AddListener(() => StartGame(2));
+            threePlayersButton.onClick.AddListener(() => StartGame(3));
+            fourPlayersButton.onClick.AddListener(() => StartGame(4));
+            playAgainButton.onClick.AddListener(() => StartGame(playerCount));
             finishMenuButton.onClick.AddListener(ShowMenu);
             hudMenuButton.onClick.AddListener(ShowMenu);
         }
@@ -81,8 +100,10 @@ namespace FartRaft
 
         public void ShowMenu()
         {
-            StopCountdown();
+            StopRoutine();
             racing = false;
+            dying = false;
+            SetFlash(0f);
             SetLocked(true);
             menuPanel.SetActive(true);
             hudPanel.SetActive(false);
@@ -91,11 +112,10 @@ namespace FartRaft
             ResetRaft(startPoint);
         }
 
-        public void StartGame(int count, bool soloMode)
+        public void StartGame(int count)
         {
-            StopCountdown();
-            playerCount = Mathf.Clamp(count, 2, 4);
-            solo = soloMode;
+            StopRoutine();
+            playerCount = Mathf.Clamp(count, 1, 4);
             ConfigureSeats();
 
             menuPanel.SetActive(false);
@@ -103,51 +123,51 @@ namespace FartRaft
             hudPanel.SetActive(true);
 
             racing = false;
+            dying = false;
             raceTime = 0f;
-            falls = 0;
+            deaths = 0;
             nextCheckpoint = 0;
             respawnPoint = startPoint;
+            SetFlash(0f);
+            SetLocked(true);
             ResetRaft(startPoint);
             UpdateHud();
-            countdown = StartCoroutine(Countdown());
+            routine = StartCoroutine(Countdown());
         }
 
         IEnumerator Countdown()
         {
-            SetLocked(true);
             for (int i = 3; i > 0; i--)
             {
                 ShowMessage(i.ToString(), 1.1f);
-                yield return new WaitForSeconds(1f);
+                yield return new WaitForSeconds(0.8f);
             }
             ShowMessage("FART!", 1f);
             SetLocked(false);
             racing = true;
-            countdown = null;
+            routine = null;
         }
 
-        void StopCountdown()
+        void StopRoutine()
         {
-            if (countdown != null) StopCoroutine(countdown);
-            countdown = null;
+            if (routine != null) StopCoroutine(routine);
+            routine = null;
         }
 
         void ConfigureSeats()
         {
-            float[] angles = playerCount == 2 ? TwoSeatAngles : playerCount == 3 ? ThreeSeatAngles : FourSeatAngles;
-
+            float[] angles = SeatAngles[playerCount - 1];
             for (int i = 0; i < seats.Length; i++)
             {
                 bool active = i < playerCount;
                 seats[i].gameObject.SetActive(active);
-                buttons[i].gameObject.SetActive(active);
+                joysticks[i].gameObject.SetActive(active);
                 if (!active) continue;
 
                 seats[i].SetAngle(angles[i]);
-                // Total thrust stays the same regardless of player count.
-                seats[i].thrustScale = 2f / playerCount;
+                seats[i].thrustScale = PowerPerPlayer[playerCount - 1];
                 seats[i].ResetGas();
-                buttons[i].SetLabel(solo ? (i == 0 ? "LEFT" : "RIGHT") : AnimalNames[i]);
+                joysticks[i].SetLabel(AnimalNames[i]);
             }
         }
 
@@ -181,10 +201,13 @@ namespace FartRaft
 
         void Update()
         {
-            if (racing)
+            if (racing) raceTime += Time.deltaTime;
+
+            UpdateProgress();
+            if (racing && !dying && coursePath != null && coursePath.Length > 0 &&
+                raft.transform.position.y < coursePath[progressIndex].y - fallDepth)
             {
-                raceTime += Time.deltaTime;
-                if (raft.transform.position.y < respawnPoint.position.y - fallDepth) OnFell();
+                routine = StartCoroutine(Die(raft.transform.position, true));
             }
 
             UpdateHud();
@@ -192,39 +215,82 @@ namespace FartRaft
             if (messageText.enabled && Time.time > messageHideTime) messageText.enabled = false;
         }
 
-        void OnFell()
+        public void OnHazard(Vector3 point)
         {
-            falls++;
-            ShowMessage("WHOOPS! Fell off", 1.4f);
-            ResetRaft(respawnPoint);
+            if (!racing || dying) return;
+            routine = StartCoroutine(Die(point, false));
         }
 
-        public void PlayImpact(Vector3 position)
+        IEnumerator Die(Vector3 point, bool fell)
+        {
+            dying = true;
+            deaths++;
+
+            if (fell)
+            {
+                Audio.Fall();
+                ShowMessage("WHOOPS!", 1.5f);
+                foreach (var seat in seats) seat.locked = true;
+                yield return new WaitForSeconds(0.9f);
+            }
+            else
+            {
+                Audio.Crash();
+                PlayImpact(point, 40);
+                ShowMessage("SPLAT!", 1.5f);
+                SetLocked(true);
+                yield return new WaitForSeconds(0.6f);
+            }
+
+            for (float t = 0f; t < 1f; t += Time.deltaTime / 0.15f)
+            {
+                SetFlash(t);
+                yield return null;
+            }
+            SetFlash(1f);
+            SetLocked(true);
+            ResetRaft(respawnPoint);
+            yield return new WaitForSeconds(0.2f);
+
+            for (float t = 1f; t > 0f; t -= Time.deltaTime / 0.35f)
+            {
+                SetFlash(t);
+                yield return null;
+            }
+            SetFlash(0f);
+
+            SetLocked(false);
+            ShowMessage("GO!", 0.7f);
+            dying = false;
+            routine = null;
+        }
+
+        void SetFlash(float alpha)
+        {
+            if (flash == null) return;
+            flash.enabled = alpha > 0f;
+            flash.color = new Color(1f, 1f, 1f, Mathf.Clamp01(alpha));
+        }
+
+        public void PlayImpact(Vector3 position, int count)
         {
             if (impactEffect == null) return;
             impactEffect.transform.position = position + Vector3.up * 0.8f;
-            impactEffect.Emit(14);
+            impactEffect.Emit(count);
         }
 
         public void OnCheckpoint(Checkpoint checkpoint)
         {
-            if (!racing || checkpoint.index != nextCheckpoint) return;
+            if (!racing || dying || checkpoint.index != nextCheckpoint) return;
             nextCheckpoint++;
             respawnPoint = checkpoint.transform;
+            Audio.Checkpoint();
             ShowMessage("CHECKPOINT!", 1.2f);
-        }
-
-        public void OnHazard()
-        {
-            if (!racing) return;
-            falls++;
-            ShowMessage("SPLAT! Back to checkpoint", 1.4f);
-            ResetRaft(respawnPoint);
         }
 
         public void OnFinish()
         {
-            if (!racing) return;
+            if (!racing || dying) return;
             if (nextCheckpoint < checkpointCount)
             {
                 ShowMessage("You missed a checkpoint!", 1.5f);
@@ -233,8 +299,9 @@ namespace FartRaft
 
             racing = false;
             SetLocked(true);
+            Audio.Cheer();
 
-            string key = "best_" + playerCount + (solo ? "_solo" : "");
+            string key = "best_v3_" + playerCount;
             float best = PlayerPrefs.GetFloat(key, float.MaxValue);
             bool record = raceTime < best;
             if (record)
@@ -244,7 +311,7 @@ namespace FartRaft
                 PlayerPrefs.Save();
             }
 
-            finishText.text = "FINISH!\nTime " + FormatTime(raceTime) + "   Falls " + falls + "\n" +
+            finishText.text = "FINISH!\nTime " + FormatTime(raceTime) + "   Deaths " + deaths + "\n" +
                               (record ? "NEW BEST!" : "Best " + FormatTime(best));
             finishPanel.SetActive(true);
         }
@@ -256,14 +323,19 @@ namespace FartRaft
             messageHideTime = Time.time + duration;
         }
 
+        void UpdateProgress()
+        {
+            if (coursePath == null || coursePath.Length == 0) return;
+            progressIndex = CoursePath.FindNearest(coursePath, raft.transform.position, progressIndex);
+        }
+
         void UpdateHud()
         {
             timerText.text = FormatTime(raceTime);
-            if (fallsText != null) fallsText.text = "FALLS " + falls;
+            if (deathsText != null) deathsText.text = "DEATHS " + deaths;
             if (progressFill != null && coursePath != null && coursePath.Length > 1)
             {
-                progressIndex = CoursePath.FindNearest(coursePath, raft.transform.position, progressIndex);
-                progressFill.fillAmount = (float)progressIndex / (coursePath.Length - 1);
+                progressFill.fillAmount = (float)Mathf.Max(progressIndex, 0) / (coursePath.Length - 1);
             }
         }
 

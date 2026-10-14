@@ -9,14 +9,23 @@ namespace FartRaft
     public class Raft : MonoBehaviour
     {
         public Transform visual;
-        public float linearDamping = 0.6f;
-        public float angularDamping = 2.5f;
+
+        [Header("Water drag (only horizontal, so falling and slopes stay fast)")]
+        public float linearDrag = 0.18f;
+        public float quadraticDrag = 0.012f;
+        public float angularDamping = 1.2f;
+        [Tooltip("Extra pull into the slide surface so the raft does not hop over bumps.")]
+        public float stickAcceleration = 8f;
+
+        [Header("Look")]
         public float bobHeight = 0.05f;
         public float bobSpeed = 2.2f;
         public float groundCheckDistance = 1.2f;
-        public float impactEffectSpeed = 4f;
+        public ParticleSystem wake;
 
         Rigidbody body;
+        Vector3 groundNormal = Vector3.up;
+        float airTime;
 
         public bool Grounded { get; private set; }
 
@@ -40,23 +49,46 @@ namespace FartRaft
             Body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
             Body.interpolation = RigidbodyInterpolation.Interpolate;
             Body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            PhysicsCompat.SetDamping(Body, linearDamping, angularDamping);
+            PhysicsCompat.SetDamping(Body, 0f, angularDamping);
+        }
+
+        void FixedUpdate()
+        {
+            // The ray starts inside the raft collider, so it never hits the raft itself.
+            bool wasGrounded = Grounded;
+            Grounded = Physics.Raycast(transform.position + Vector3.up * 0.2f, Vector3.down, out RaycastHit hit,
+                groundCheckDistance, ~0, QueryTriggerInteraction.Ignore);
+            groundNormal = Grounded ? hit.normal : Vector3.up;
+
+            if (Grounded && !wasGrounded && airTime > 0.35f && GameManager.Instance != null) GameManager.Instance.Audio.Splash();
+            airTime = Grounded ? 0f : airTime + Time.fixedDeltaTime;
+
+            if (Body.isKinematic) return;
+
+            Vector3 velocity = PhysicsCompat.GetVelocity(Body);
+            Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
+            float speed = flat.magnitude;
+            Body.AddForce(-flat * (linearDrag + quadraticDrag * speed), ForceMode.Acceleration);
+
+            if (Grounded) Body.AddForce(-groundNormal * stickAcceleration, ForceMode.Acceleration);
         }
 
         void Update()
         {
-            if (visual == null) return;
+            if (wake != null)
+            {
+                var emission = wake.emission;
+                emission.enabled = Grounded && !Body.isKinematic;
+            }
 
-            // The ray starts inside the raft collider, so it never hits the raft itself.
-            Grounded = Physics.Raycast(transform.position + Vector3.up * 0.2f, Vector3.down, out RaycastHit hit,
-                groundCheckDistance, ~0, QueryTriggerInteraction.Ignore);
+            if (visual == null) return;
 
             float t = Time.time * bobSpeed;
             Quaternion bob = Quaternion.Euler(Mathf.Sin(t * 0.8f) * 2f, 0f, Mathf.Sin(t * 1.3f) * 2f);
-            Quaternion target = bob;
+            Quaternion target;
             if (Grounded)
             {
-                Vector3 localNormal = transform.InverseTransformDirection(hit.normal);
+                Vector3 localNormal = transform.InverseTransformDirection(groundNormal);
                 target = Quaternion.FromToRotation(Vector3.up, localNormal) * bob;
             }
             else
@@ -66,31 +98,44 @@ namespace FartRaft
             }
 
             visual.localPosition = new Vector3(0f, Grounded ? Mathf.Sin(t) * bobHeight : 0f, 0f);
-            visual.localRotation = Quaternion.Slerp(visual.localRotation, target, Time.deltaTime * 8f);
+            visual.localRotation = Quaternion.Slerp(visual.localRotation, target, 1f - Mathf.Exp(-10f * Time.deltaTime));
         }
 
         void OnCollisionEnter(Collision collision)
         {
-            var bumper = collision.collider.GetComponentInParent<Bumper>();
+            var manager = GameManager.Instance;
             Vector3 point = collision.contactCount > 0 ? collision.GetContact(0).point : transform.position;
 
-            if (bumper != null)
+            if (collision.collider.GetComponentInParent<Hazard>() != null)
             {
-                Vector3 away = transform.position - point;
-                away.y = 0f;
-                if (away.sqrMagnitude < 0.001f) away = -transform.forward;
-                Body.AddForce(away.normalized * bumper.bounce, ForceMode.VelocityChange);
+                if (manager != null) manager.OnHazard(point);
+                return;
             }
 
-            if ((bumper != null || collision.relativeVelocity.magnitude > impactEffectSpeed) && GameManager.Instance != null)
+            var bumper = collision.collider.GetComponentInParent<Bumper>();
+            if (bumper == null) return;
+
+            Vector3 away = transform.position - point;
+            away.y = 0f;
+            if (away.sqrMagnitude < 0.001f) away = -transform.forward;
+            Body.AddForce(away.normalized * bumper.bounce, ForceMode.VelocityChange);
+
+            if (manager != null)
             {
-                GameManager.Instance.PlayImpact(point);
+                float strength = collision.relativeVelocity.magnitude;
+                manager.Audio.Bump(strength);
+                if (strength > 3f) manager.PlayImpact(point, 8);
             }
         }
 
-        // Frozen during menus and countdowns so it does not drift down the slope.
+        // Frozen during menus, countdowns and crashes so it does not drift down the slope.
         public void SetFrozen(bool frozen)
         {
+            if (frozen && !Body.isKinematic)
+            {
+                PhysicsCompat.SetVelocity(Body, Vector3.zero);
+                Body.angularVelocity = Vector3.zero;
+            }
             Body.isKinematic = frozen;
         }
 
@@ -99,6 +144,8 @@ namespace FartRaft
             Body.position = position;
             Body.rotation = rotation;
             transform.SetPositionAndRotation(position, rotation);
+            visual.localRotation = Quaternion.identity;
+            if (wake != null) wake.Clear();
             if (Body.isKinematic) return;
             PhysicsCompat.SetVelocity(Body, Vector3.zero);
             Body.angularVelocity = Vector3.zero;

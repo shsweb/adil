@@ -87,10 +87,12 @@ namespace FartRaft.EditorTools
             var track = SampleTrack(Waypoints, 1f);
             var course = BuildCourse(track, m, random, out Transform startPoint, out int checkpointCount);
             BuildEnvironment(track, course, m, random);
+            OptimizeStatic(course);
 
             var raft = BuildRaft(m, startPoint, out FartSeat[] seats);
             var cameraFollow = BuildCamera(raft.transform, track.pos.ToArray());
             AddPostProcessing(cameraFollow.GetComponent<Camera>());
+            ConfigureQuality();
 
             var managerGo = new GameObject("GameManager");
             var manager = managerGo.AddComponent<GameManager>();
@@ -102,6 +104,7 @@ namespace FartRaft.EditorTools
             manager.coursePath = track.pos.ToArray();
             manager.checkpointCount = checkpointCount;
             manager.impactEffect = BuildImpactEffect(m);
+            manager.gameAudio = BuildGameAudio(managerGo);
 
             BuildUI(manager, seats);
 
@@ -111,8 +114,8 @@ namespace FartRaft.EditorTools
 
             EditorUtility.DisplayDialog("Fart Raft",
                 "Scene built and saved to " + ScenePath + ".\n\n" +
-                "Press Play. In the editor: hold A / L to fart (players 1 and 2), Z / X and N / M to walk around the raft. " +
-                "Players 3 and 4: Q / P to fart, 1 / 2 and 9 / 0 to walk.", "OK");
+                "Press Play. In the editor each player holds a direction (where the raft should go):\n" +
+                "P1: W A S D    P2: arrow keys    P3: I J K L    P4: numpad 8 4 5 6", "OK");
         }
 
         [MenuItem("Fart Raft/3. Upgrade Graphics To URP (Bloom, Color Grading)")]
@@ -154,7 +157,6 @@ namespace FartRaft.EditorTools
                     pipeline = (RenderPipelineAsset)create.Invoke(null, new object[] { rendererData });
                     AssetDatabase.CreateAsset(pipeline, pipelinePath);
                 }
-                SetMember(pipeline, "msaaSampleCount", 4);
 
                 GraphicsSettings.defaultRenderPipeline = pipeline;
                 int currentLevel = QualitySettings.GetQualityLevel();
@@ -197,24 +199,36 @@ namespace FartRaft.EditorTools
             }
         }
 
-        // The slide center line: x, height, z, width. It runs downhill the whole way.
+        // The slide center line: x, height, z, width. Flat pools alternate with steep
+        // slides; the height never goes up, so the raft can never get stuck in a dip.
         static readonly Waypoint[] Waypoints =
         {
-            new Waypoint(0f, 30f, -12f, 13f),
-            new Waypoint(0f, 29.5f, 22f, 13f),
-            new Waypoint(14f, 27f, 55f, 12f),
-            new Waypoint(24f, 24f, 92f, 11f),
-            new Waypoint(12f, 21f, 128f, 12f),
-            new Waypoint(-12f, 18f, 158f, 12f),
-            new Waypoint(-20f, 15f, 196f, 16f),
-            new Waypoint(-6f, 12f, 236f, 11f),
-            new Waypoint(12f, 9f, 266f, 11f),
-            new Waypoint(14f, 8f, 300f, 15f),
+            new Waypoint(0f, 60f, -12f, 14f),     // start pool
+            new Waypoint(0f, 59.5f, 20f, 14f),
+            new Waypoint(6f, 52f, 50f, 11f),      // slide
+            new Waypoint(20f, 45f, 80f, 11f),
+            new Waypoint(28f, 44.5f, 110f, 17f),  // pool: buoys
+            new Waypoint(22f, 44f, 140f, 17f),    // pool: big spinner
+            new Waypoint(4f, 36.5f, 168f, 10f),   // narrow slide without walls
+            new Waypoint(-14f, 29f, 195f, 10f),   // slide: pendulums
+            new Waypoint(-22f, 28.5f, 225f, 16f), // canyon pool: rocks and sliding blocks
+            new Waypoint(-14f, 28f, 255f, 16f),
+            new Waypoint(0f, 21f, 282f, 11f),     // slide: spinners
+            new Waypoint(14f, 14.5f, 308f, 11f),
+            new Waypoint(16f, 14f, 340f, 16f),    // finish pool
         };
 
         // Walls per segment (between waypoint i and i+1). Open edges let you fall off.
-        static readonly Edge[] LeftEdges = { Edge.Rock, Edge.Bumper, Edge.Open, Edge.Bumper, Edge.Bumper, Edge.Rock, Edge.Open, Edge.Bumper, Edge.Rock };
-        static readonly Edge[] RightEdges = { Edge.Rock, Edge.Bumper, Edge.Bumper, Edge.Open, Edge.Bumper, Edge.Rock, Edge.Open, Edge.Bumper, Edge.Rock };
+        static readonly Edge[] LeftEdges =
+        {
+            Edge.Rock, Edge.Bumper, Edge.Bumper, Edge.Bumper, Edge.Rock, Edge.Open,
+            Edge.Bumper, Edge.Rock, Edge.Open, Edge.Bumper, Edge.Open, Edge.Rock,
+        };
+        static readonly Edge[] RightEdges =
+        {
+            Edge.Rock, Edge.Bumper, Edge.Open, Edge.Bumper, Edge.Rock, Edge.Open,
+            Edge.Bumper, Edge.Rock, Edge.Bumper, Edge.Bumper, Edge.Bumper, Edge.Rock,
+        };
 
         class Track
         {
@@ -243,6 +257,19 @@ namespace FartRaft.EditorTools
         {
             var track = new Track();
             int n = w.Length;
+
+            // Height tangents (Fritsch-Carlson) keep the height curve monotone between waypoints.
+            var slopes = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float before = i > 0 ? w[i].position.y - w[i - 1].position.y : 0f;
+                float after = i < n - 1 ? w[i + 1].position.y - w[i].position.y : 0f;
+                if (i == 0) slopes[i] = after;
+                else if (i == n - 1) slopes[i] = before;
+                else if (before * after <= 0f) slopes[i] = 0f;
+                else slopes[i] = 2f / (1f / before + 1f / after);
+            }
+
             for (int i = 0; i < n - 1; i++)
             {
                 Vector3 p0 = w[Mathf.Max(i - 1, 0)].position;
@@ -253,7 +280,9 @@ namespace FartRaft.EditorTools
                 for (int s = 0; s < steps; s++)
                 {
                     float t = (float)s / steps;
-                    track.pos.Add(CatmullRom(p0, p1, p2, p3, t));
+                    Vector3 p = CatmullRom(p0, p1, p2, p3, t);
+                    p.y = Hermite(p1.y, slopes[i], p2.y, slopes[i + 1], t);
+                    track.pos.Add(p);
                     track.width.Add(Mathf.Lerp(w[i].width, w[i + 1].width, Mathf.SmoothStep(0f, 1f, t)));
                     track.segment.Add(i);
                 }
@@ -276,6 +305,13 @@ namespace FartRaft.EditorTools
             return track;
         }
 
+        static float Hermite(float y1, float m1, float y2, float m2, float t)
+        {
+            float t2 = t * t;
+            float t3 = t2 * t;
+            return (2f * t3 - 3f * t2 + 1f) * y1 + (t3 - 2f * t2 + t) * m1 + (-2f * t3 + 3f * t2) * y2 + (t3 - t2) * m2;
+        }
+
         static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
         {
             float t2 = t * t;
@@ -295,44 +331,43 @@ namespace FartRaft.EditorTools
             var obstacles = new GameObject("Obstacles").transform;
             obstacles.SetParent(course, false);
 
-            // Segment 1: floating spiky buoys.
-            Buoy(obstacles, m, tr, tr.IndexAt(1, 0.30f), -3f);
-            Buoy(obstacles, m, tr, tr.IndexAt(1, 0.55f), 3f);
-            Buoy(obstacles, m, tr, tr.IndexAt(1, 0.80f), 0f);
+            // Spiky things (buoys, spinners, pendulums) are deadly. Rocks and blocks only bump.
 
-            // Segment 2: four-arm spinner with an open edge on the left.
-            CrossSpinner(obstacles, m, tr, tr.IndexAt(2, 0.55f), 4.4f, 4, 45f);
+            // Segment 3: pool with spiky buoys.
+            Buoy(obstacles, m, tr, tr.IndexAt(3, 0.35f), -3.5f);
+            Buoy(obstacles, m, tr, tr.IndexAt(3, 0.55f), 3.5f);
+            Buoy(obstacles, m, tr, tr.IndexAt(3, 0.80f), -1f);
 
-            // Segment 3: rocks in the water, open edge on the right.
-            WaterRock(obstacles, m, tr, tr.IndexAt(3, 0.40f), 2.5f, random);
-            WaterRock(obstacles, m, tr, tr.IndexAt(3, 0.72f), -2.5f, random);
+            // Segment 4: pool with a big four-arm spinner.
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(4, 0.5f), 4.5f, 3, 35f);
 
-            // Segment 4: swinging pendulums.
-            PendulumArch(obstacles, m, tr, tr.IndexAt(4, 0.30f), 0f);
-            PendulumArch(obstacles, m, tr, tr.IndexAt(4, 0.65f), 0.5f);
+            // Segment 6: slide with swinging pendulums.
+            PendulumArch(obstacles, m, tr, tr.IndexAt(6, 0.35f), 0f);
+            PendulumArch(obstacles, m, tr, tr.IndexAt(6, 0.70f), 0.5f);
 
-            // Segment 5: rocky canyon with buoys.
-            Buoy(obstacles, m, tr, tr.IndexAt(5, 0.30f), 2f);
-            Buoy(obstacles, m, tr, tr.IndexAt(5, 0.50f), -3f);
-            Buoy(obstacles, m, tr, tr.IndexAt(5, 0.72f), 1.5f);
+            // Segment 7: rocky canyon pool with rocks and sliding blocks.
+            WaterRock(obstacles, m, tr, tr.IndexAt(7, 0.30f), 3f, random);
+            WaterRock(obstacles, m, tr, tr.IndexAt(7, 0.55f), -3.5f, random);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(7, 0.75f), 0f);
 
-            // Segment 6: wide open section with sliding blocks.
-            SlidingBlock(obstacles, m, tr, tr.IndexAt(6, 0.35f), 0f);
-            SlidingBlock(obstacles, m, tr, tr.IndexAt(6, 0.65f), 0.5f);
+            // Segment 8: open pool with buoys and a sliding block.
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(8, 0.30f), 0.5f);
+            Buoy(obstacles, m, tr, tr.IndexAt(8, 0.60f), 2.5f);
+            Buoy(obstacles, m, tr, tr.IndexAt(8, 0.80f), -3f);
 
-            // Segment 7: two counter-rotating spinners.
-            CrossSpinner(obstacles, m, tr, tr.IndexAt(7, 0.30f), 4.2f, 2, 60f);
-            CrossSpinner(obstacles, m, tr, tr.IndexAt(7, 0.70f), 4.2f, 2, -60f);
+            // Segment 9: slide with two counter-rotating spinners.
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.35f), 3.8f, 2, 50f);
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.75f), 3.8f, 2, -50f);
 
-            int[] checkpointSegments = { 3, 5, 7 };
+            int[] checkpointSegments = { 3, 5, 7, 9 };
             for (int i = 0; i < checkpointSegments.Length; i++)
             {
-                BuildCheckpoint(course, m, tr, tr.IndexAt(checkpointSegments[i], 0.05f), i);
+                BuildCheckpoint(course, m, tr, tr.IndexAt(checkpointSegments[i], 0.04f), i);
             }
             checkpointCount = checkpointSegments.Length;
 
             BuildStartArch(course, m, tr, 12);
-            BuildFinish(course, m, tr, tr.IndexAt(8, 0.55f));
+            BuildFinish(course, m, tr, tr.IndexAt(11, 0.6f));
 
             start = new GameObject("StartPoint").transform;
             start.SetParent(course, false);
@@ -463,7 +498,7 @@ namespace FartRaft.EditorTools
             var go = Prim(PrimitiveType.Cylinder, "Bumper", parent, (a + b) * 0.5f + offset,
                 new Vector3(0.9f, d.magnitude * 0.5f + 0.15f, 0.9f), m.bumper, true);
             go.transform.rotation = Quaternion.FromToRotation(Vector3.up, d.normalized);
-            go.AddComponent<Bumper>().bounce = 5f;
+            go.AddComponent<Bumper>().bounce = 4f;
 
             for (int j = 0; j < 2; j++)
             {
@@ -490,7 +525,7 @@ namespace FartRaft.EditorTools
             var collider = rock.AddComponent<MeshCollider>();
             collider.sharedMesh = mesh;
             collider.convex = true;
-            rock.isStatic = true;
+            rock.AddComponent<Bumper>().bounce = 3f;
         }
 
         // ================================================================ Obstacles
@@ -499,7 +534,7 @@ namespace FartRaft.EditorTools
         {
             Vector3 pos = tr.Point(k, sideOffset);
             var buoy = Prim(PrimitiveType.Sphere, "Buoy", parent, pos + Vector3.up * 0.45f, Vector3.one * 1.7f, m.buoy, true);
-            buoy.AddComponent<Bumper>().bounce = 7f;
+            buoy.AddComponent<Hazard>();
             Prim(PrimitiveType.Cylinder, "Band", buoy.transform, Vector3.zero, new Vector3(1.04f, 0.08f, 1.04f), m.white, false);
             for (int i = 0; i < 6; i++)
             {
@@ -520,7 +555,7 @@ namespace FartRaft.EditorTools
             pivot.transform.position = pos;
             pivot.AddComponent<Rigidbody>().isKinematic = true;
             pivot.AddComponent<Spinner>().degreesPerSecond = speed;
-            pivot.AddComponent<Bumper>().bounce = 8f;
+            pivot.AddComponent<Hazard>();
 
             for (int i = 0; i < arms; i++)
             {
@@ -542,7 +577,7 @@ namespace FartRaft.EditorTools
         static void WaterRock(Transform parent, Mats m, Track tr, int k, float sideOffset, System.Random random)
         {
             WallRock(parent, m, tr.Point(k, sideOffset) + Vector3.up * 0.1f, 2.4f, random);
-            parent.GetChild(parent.childCount - 1).gameObject.AddComponent<Bumper>().bounce = 4f;
+            parent.GetChild(parent.childCount - 1).GetComponent<Bumper>().bounce = 4.5f;
         }
 
         static void PendulumArch(Transform parent, Mats m, Track tr, int k, float phase)
@@ -566,7 +601,7 @@ namespace FartRaft.EditorTools
             pivot.AddComponent<Rigidbody>().isKinematic = true;
             var pendulum = pivot.AddComponent<Pendulum>();
             pendulum.phase = phase;
-            pivot.AddComponent<Bumper>().bounce = 9f;
+            pivot.AddComponent<Hazard>();
 
             const float armLength = 5.6f;
             Prim(PrimitiveType.Cylinder, "Rope", pivot.transform, new Vector3(0f, -armLength * 0.5f, 0f), new Vector3(0.12f, armLength * 0.5f, 0.12f), m.darkWood, false);
@@ -584,7 +619,7 @@ namespace FartRaft.EditorTools
             Vector3 start = tr.Point(k, -travel * 0.5f) + Vector3.up * 0.6f;
             var block = Prim(PrimitiveType.Cube, "SlidingBlock", parent, start, new Vector3(3f, 1.3f, 1.3f), m.wood, true);
             block.transform.rotation = Quaternion.LookRotation(tr.forward[k]);
-            Prim(PrimitiveType.Cube, "Stripe", block.transform, new Vector3(0f, 0.2f, 0f), new Vector3(1.02f, 0.25f, 1.02f), m.buoy, false);
+            Prim(PrimitiveType.Cube, "Stripe", block.transform, new Vector3(0f, 0.2f, 0f), new Vector3(1.02f, 0.25f, 1.02f), m.signYellow, false);
             block.AddComponent<Rigidbody>().isKinematic = true;
             var mover = block.AddComponent<Mover>();
             mover.offset = tr.right[k] * travel;
@@ -927,6 +962,8 @@ namespace FartRaft.EditorTools
                 handle.transform.localRotation = Quaternion.Euler(0f, (45f + i * 90f), 90f);
             }
 
+            raft.wake = BuildWake(raftGo.transform, m.wakeRing);
+
             seats = new FartSeat[4];
             float[] defaultAngles = { 225f, 135f, 315f, 45f };
             for (int i = 0; i < 4; i++)
@@ -964,7 +1001,52 @@ namespace FartRaft.EditorTools
             seat.rightArm = rightArm;
             seat.fartParticles = particles;
             seat.fartAudio = audio;
+            seat.fartClips = FartClips();
             return seat;
+        }
+
+        // White rings left on the water behind the raft.
+        static ParticleSystem BuildWake(Transform raft, Material material)
+        {
+            var go = new GameObject("Wake");
+            go.transform.SetParent(raft, false);
+            go.transform.localPosition = new Vector3(0f, -0.38f, 0f);
+            var ps = go.AddComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            var main = ps.main;
+            main.loop = true;
+            main.playOnAwake = true;
+            main.startLifetime = 1.4f;
+            main.startSpeed = 0f;
+            main.startSize = 3.2f;
+            main.startColor = new Color(1f, 1f, 1f, 0.8f);
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 60;
+
+            var emission = ps.emission;
+            emission.rateOverTime = 0f;
+            emission.rateOverDistance = 0.45f;
+
+            var shape = ps.shape;
+            shape.enabled = false;
+
+            var size = ps.sizeOverLifetime;
+            size.enabled = true;
+            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0.8f, 1f, 1.9f));
+
+            var color = ps.colorOverLifetime;
+            color.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0.8f, 0f), new GradientAlphaKey(0f, 1f) });
+            color.color = gradient;
+
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.HorizontalBillboard;
+            renderer.sharedMaterial = material;
+            return ps;
         }
 
         // Chunky pill-shaped animals with googly eyes. They face +Z (the raft center).
@@ -1046,32 +1128,33 @@ namespace FartRaft.EditorTools
             var main = ps.main;
             main.loop = true;
             main.playOnAwake = true;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(1.1f, 1.6f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 3.5f);
-            main.startSize = new ParticleSystem.MinMaxCurve(1.0f, 1.8f);
+            // A thick jet: fast, dense particles that slow down and puff up into a cloud.
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.8f, 1.1f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(7f, 10f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.7f, 1.1f);
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
-            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.62f, 0.95f, 0.1f, 0.95f), new Color(0.8f, 1f, 0.3f, 0.8f));
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.62f, 0.95f, 0.1f, 0.95f), new Color(0.8f, 1f, 0.3f, 0.85f));
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.gravityModifier = -0.02f;
-            main.maxParticles = 120;
+            main.gravityModifier = -0.03f;
+            main.maxParticles = 80;
 
             var emission = ps.emission;
-            emission.rateOverTime = 16f;
+            emission.rateOverTime = 34f;
             emission.enabled = false;
 
             var shape = ps.shape;
             shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 25f;
-            shape.radius = 0.15f;
+            shape.angle = 9f;
+            shape.radius = 0.12f;
 
             var velocity = ps.limitVelocityOverLifetime;
             velocity.enabled = true;
-            velocity.limit = 1.2f;
-            velocity.dampen = 0.15f;
+            velocity.limit = 0.8f;
+            velocity.dampen = 0.08f;
 
             var size = ps.sizeOverLifetime;
             size.enabled = true;
-            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.5f, 1f, 1.7f));
+            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.6f, 1f, 2.4f));
 
             var color = ps.colorOverLifetime;
             color.enabled = true;
@@ -1094,13 +1177,13 @@ namespace FartRaft.EditorTools
             var main = ps.main;
             main.loop = true;
             main.playOnAwake = true;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.3f, 0.5f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(4f, 8f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.5f, 1.1f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.35f, 0.6f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(5f, 11f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.6f, 1.8f);
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
             main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.95f, 0.3f), new Color(1f, 0.6f, 0.15f));
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 80;
+            main.maxParticles = 120;
 
             var emission = ps.emission;
             emission.rateOverTime = 0f;
@@ -1205,30 +1288,30 @@ namespace FartRaft.EditorTools
             timerImage.color = new Color(0.25f, 0.3f, 0.38f, 0.75f);
             manager.timerText = Label(timerBack, "Timer", "0:00.00", 48, center, Vector2.zero, new Vector2(300f, 70f));
 
-            var fallsBack = UIObject("FallsBack", hud);
-            Place(fallsBack, new Vector2(1f, 1f), new Vector2(-150f, -78f), new Vector2(220f, 64f));
-            var fallsImage = fallsBack.gameObject.AddComponent<Image>();
-            fallsImage.sprite = roundedSprite;
-            fallsImage.type = Image.Type.Sliced;
-            fallsImage.color = new Color(0.25f, 0.3f, 0.38f, 0.75f);
-            manager.fallsText = Label(fallsBack, "Falls", "FALLS 0", 36, center, Vector2.zero, new Vector2(220f, 64f));
+            var deathsBack = UIObject("DeathsBack", hud);
+            Place(deathsBack, new Vector2(1f, 1f), new Vector2(-160f, -78f), new Vector2(240f, 64f));
+            var deathsImage = deathsBack.gameObject.AddComponent<Image>();
+            deathsImage.sprite = roundedSprite;
+            deathsImage.type = Image.Type.Sliced;
+            deathsImage.color = new Color(0.25f, 0.3f, 0.38f, 0.75f);
+            manager.deathsText = Label(deathsBack, "Deaths", "DEATHS 0", 36, center, Vector2.zero, new Vector2(240f, 64f));
 
             manager.hudMenuButton = MakeButton(hud, "MenuButton", "MENU", top, new Vector2(280f, -78f), new Vector2(170f, 64f), new Color(0.25f, 0.3f, 0.38f, 0.75f), 32);
             manager.syncText = Label(hud, "SyncBoost", "SYNC BOOST!", 60, top, new Vector2(0f, -160f), new Vector2(800f, 90f));
             manager.syncText.color = new Color(0.7f, 1f, 0.2f);
             manager.messageText = Label(hud, "Message", "", 110, center, new Vector2(0f, 140f), new Vector2(1400f, 160f));
-            Label(hud, "Hint", "Hold to fart (pushes the raft away from you).  Slide left/right while holding to walk around the raft.",
+            Label(hud, "Hint", "Push your joystick where the raft should go - your animal runs to the other side and farts!",
                 28, new Vector2(0.5f, 0f), new Vector2(0f, 45f), new Vector2(1100f, 60f));
 
             Vector2[] anchors = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };
-            var buttons = new TouchFartButton[4];
+            var joysticks = new FartJoystick[4];
             for (int i = 0; i < 4; i++)
             {
                 Vector2 a = anchors[i];
-                Vector2 pos = new Vector2(a.x < 0.5f ? 230f : -230f, a.y < 0.5f ? 230f : -300f);
-                buttons[i] = FartButton(hud, i, a, pos, seats[i]);
+                Vector2 pos = new Vector2(a.x < 0.5f ? 240f : -240f, a.y < 0.5f ? 230f : -330f);
+                joysticks[i] = Joystick(hud, i, a, pos, seats[i]);
             }
-            manager.buttons = buttons;
+            manager.joysticks = joysticks;
 
             // Menu
             var menu = Panel(root, "Menu", new Color(0.1f, 0.25f, 0.45f, 0.82f));
@@ -1236,11 +1319,11 @@ namespace FartRaft.EditorTools
             var title = Label(menu, "Title", "FART RAFT", 160, center, new Vector2(0f, 300f), new Vector2(1400f, 210f));
             title.color = new Color(0.75f, 1f, 0.25f);
             Label(menu, "Subtitle", "Share one raft. Fart together. Don't fall off!", 46, center, new Vector2(0f, 175f), new Vector2(1400f, 80f));
-            manager.soloButton = MakeButton(menu, "Solo", "SOLO\n(2 thumbs)", center, new Vector2(-540f, -10f), new Vector2(320f, 180f), PlayerColors[0], 44);
+            manager.soloButton = MakeButton(menu, "Solo", "SOLO", center, new Vector2(-540f, -10f), new Vector2(320f, 180f), PlayerColors[0], 44);
             manager.twoPlayersButton = MakeButton(menu, "TwoPlayers", "2 PLAYERS", center, new Vector2(-180f, -10f), new Vector2(320f, 180f), PlayerColors[1], 44);
             manager.threePlayersButton = MakeButton(menu, "ThreePlayers", "3 PLAYERS", center, new Vector2(180f, -10f), new Vector2(320f, 180f), PlayerColors[2], 44);
             manager.fourPlayersButton = MakeButton(menu, "FourPlayers", "4 PLAYERS", center, new Vector2(540f, -10f), new Vector2(320f, 180f), PlayerColors[3], 44);
-            Label(menu, "MenuHint", "Everyone plays on the same phone - each player holds one corner button.", 34, center, new Vector2(0f, -200f), new Vector2(1500f, 60f));
+            Label(menu, "MenuHint", "Everyone plays on the same phone - each player gets a joystick in one corner.", 34, center, new Vector2(0f, -200f), new Vector2(1500f, 60f));
 
             // Finish
             var finish = Panel(root, "Finish", new Color(0f, 0f, 0f, 0.7f));
@@ -1249,40 +1332,64 @@ namespace FartRaft.EditorTools
             manager.playAgainButton = MakeButton(finish, "PlayAgain", "PLAY AGAIN", center, new Vector2(-220f, -200f), new Vector2(380f, 140f), PlayerColors[2], 46);
             manager.finishMenuButton = MakeButton(finish, "BackToMenu", "MENU", center, new Vector2(220f, -200f), new Vector2(380f, 140f), PlayerColors[1], 46);
 
+            var flashRt = UIObject("Flash", root);
+            Stretch(flashRt);
+            var flash = flashRt.gameObject.AddComponent<Image>();
+            flash.color = new Color(1f, 1f, 1f, 0f);
+            flash.raycastTarget = false;
+            flash.enabled = false;
+            manager.flash = flash;
+
             hud.gameObject.SetActive(false);
             finish.gameObject.SetActive(false);
         }
 
-        static TouchFartButton FartButton(Transform parent, int index, Vector2 anchor, Vector2 pos, FartSeat seat)
+        static FartJoystick Joystick(Transform parent, int index, Vector2 anchor, Vector2 pos, FartSeat seat)
         {
-            var rt = UIObject("FartButton_P" + (index + 1), parent);
-            Place(rt, anchor, pos, new Vector2(320f, 320f));
+            var rt = UIObject("Joystick_P" + (index + 1), parent);
+            Place(rt, anchor, pos, new Vector2(340f, 340f));
+
+            // Invisible, slightly larger touch area so fingers do not slip off.
+            var hitArea = rt.gameObject.AddComponent<Image>();
+            hitArea.color = new Color(0f, 0f, 0f, 0f);
 
             var ringRt = UIObject("GasRing", rt);
-            Stretch(ringRt);
+            Place(ringRt, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300f, 300f));
             var ring = ringRt.gameObject.AddComponent<Image>();
             ring.sprite = circleSprite;
             ring.type = Image.Type.Filled;
             ring.fillMethod = Image.FillMethod.Radial360;
             ring.fillOrigin = (int)Image.Origin360.Top;
             ring.fillClockwise = true;
+            ring.raycastTarget = false;
 
-            var faceRt = UIObject("Face", rt);
-            Place(faceRt, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(270f, 270f));
-            var face = faceRt.gameObject.AddComponent<Image>();
-            face.sprite = circleSprite;
-            face.color = PlayerColors[index];
-            face.raycastTarget = false;
+            var baseRt = UIObject("Base", rt);
+            Place(baseRt, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(270f, 270f));
+            var baseImage = baseRt.gameObject.AddComponent<Image>();
+            baseImage.sprite = circleSprite;
+            baseImage.color = new Color(0.12f, 0.16f, 0.24f, 0.55f);
+            baseImage.raycastTarget = false;
 
-            var label = Label(rt, "Label", AnimalNames[index], 50, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300f, 100f));
+            var knobRt = UIObject("Knob", rt);
+            Place(knobRt, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(130f, 130f));
+            var knob = knobRt.gameObject.AddComponent<Image>();
+            knob.sprite = circleSprite;
+            knob.color = PlayerColors[index];
+            knob.raycastTarget = false;
 
-            var button = rt.gameObject.AddComponent<TouchFartButton>();
-            button.seat = seat;
-            button.face = face;
-            button.gasRing = ring;
-            button.label = label;
-            button.color = PlayerColors[index];
-            return button;
+            bool top = anchor.y > 0.5f;
+            var label = Label(rt, "Label", AnimalNames[index], 40, new Vector2(0.5f, 0.5f), new Vector2(0f, top ? -195f : 195f), new Vector2(300f, 60f));
+            label.color = Color.Lerp(PlayerColors[index], Color.white, 0.4f);
+
+            var stick = rt.gameObject.AddComponent<FartJoystick>();
+            stick.seat = seat;
+            stick.knob = knobRt;
+            stick.knobImage = knob;
+            stick.gasRing = ring;
+            stick.label = label;
+            stick.color = PlayerColors[index];
+            stick.radius = 120f;
+            return stick;
         }
 
         static RectTransform UIObject(string name, Transform parent)
@@ -1405,6 +1512,7 @@ namespace FartRaft.EditorTools
             };
             public readonly Material puff = Unlit("Puff", SoftCircleTexture());
             public readonly Material star = Unlit("Star", StarTexture());
+            public readonly Material wakeRing = Unlit("WakeRing", RingTexture());
         }
 
         static Shader LitShader()
@@ -1490,6 +1598,17 @@ namespace FartRaft.EditorTools
                 float dx = u * 2f - 1f, dy = v * 2f - 1f;
                 float a = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
                 return new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, a * 1.6f));
+            });
+        }
+
+        static Texture2D RingTexture()
+        {
+            return SaveTexture("WakeRing", 128, (u, v) =>
+            {
+                float dx = u * 2f - 1f, dy = v * 2f - 1f;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                float ring = Mathf.Clamp01(1f - Mathf.Abs(r - 0.8f) / 0.09f);
+                return new Color(1f, 1f, 1f, ring * ring);
             });
         }
 
@@ -1627,16 +1746,16 @@ namespace FartRaft.EditorTools
                 slippery = new PhysicsMaterial("Slippery")
                 {
                     frictionCombine = PhysicsMaterialCombine.Minimum,
-                    bounceCombine = PhysicsMaterialCombine.Maximum,
+                    bounceCombine = PhysicsMaterialCombine.Minimum,
 #else
                 slippery = new PhysicMaterial("Slippery")
                 {
                     frictionCombine = PhysicMaterialCombine.Minimum,
-                    bounceCombine = PhysicMaterialCombine.Maximum,
+                    bounceCombine = PhysicMaterialCombine.Minimum,
 #endif
-                    dynamicFriction = 0.02f,
-                    staticFriction = 0.02f,
-                    bounciness = 0.3f,
+                    dynamicFriction = 0.01f,
+                    staticFriction = 0.01f,
+                    bounciness = 0f,
                 };
                 AssetDatabase.CreateAsset(slippery, GeneratedFolder + "/Slippery.asset");
             }
@@ -1656,6 +1775,7 @@ namespace FartRaft.EditorTools
             pillarMesh = null;
             for (int i = 0; i < rockMeshes.Length; i++) rockMeshes[i] = null;
             slippery = null;
+            fartClips = null;
             meshCounter = 0;
         }
 
@@ -1854,6 +1974,70 @@ namespace FartRaft.EditorTools
             triangles.Add(a);
             triangles.Add(b);
             triangles.Add(c);
+        }
+
+        // ================================================================ Performance
+
+        // Everything that never moves is marked static (Unity merges it into a few draw
+        // calls) and stops casting shadows. Moving obstacles keep their shadows.
+        static void OptimizeStatic(Transform root)
+        {
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.GetComponentInParent<Rigidbody>() != null) continue;
+                GameObjectUtility.SetStaticEditorFlags(t.gameObject, StaticEditorFlags.BatchingStatic);
+                var r = t.GetComponent<Renderer>();
+                if (r != null) r.shadowCastingMode = ShadowCastingMode.Off;
+            }
+        }
+
+        static void ConfigureQuality()
+        {
+            QualitySettings.shadowDistance = 45f;
+            QualitySettings.shadowCascades = 1;
+            var pipeline = GraphicsSettings.currentRenderPipeline;
+            if (pipeline == null) return;
+            SetMember(pipeline, "shadowDistance", 45f);
+            SetMember(pipeline, "shadowCascadeCount", 1);
+            SetMember(pipeline, "msaaSampleCount", 2);
+            EditorUtility.SetDirty(pipeline);
+        }
+
+        // ================================================================ Audio
+
+        const string AudioFolder = Root + "/Audio";
+
+        static AudioClip LoadClip(string name)
+        {
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(AudioFolder + "/" + name + ".ogg");
+            if (clip == null) Debug.LogWarning("[Fart Raft] Missing sound " + AudioFolder + "/" + name + ".ogg");
+            return clip;
+        }
+
+        static AudioClip[] fartClips;
+
+        static AudioClip[] FartClips()
+        {
+            if (fartClips != null) return fartClips;
+            fartClips = AssetDatabase.FindAssets("fart_ t:AudioClip", new[] { AudioFolder })
+                .Select(guid => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(guid)))
+                .Where(clip => clip != null)
+                .ToArray();
+            return fartClips;
+        }
+
+        static GameAudio BuildGameAudio(GameObject go)
+        {
+            go.AddComponent<AudioSource>();
+            var audio = go.AddComponent<GameAudio>();
+            audio.bump = LoadClip("sfx_bump");
+            audio.punch = LoadClip("sfx_punch");
+            audio.explosion = LoadClip("sfx_explosion");
+            audio.fall = LoadClip("sfx_fall");
+            audio.splash = LoadClip("sfx_splash");
+            audio.checkpoint = LoadClip("sfx_checkpoint");
+            audio.cheer = LoadClip("sfx_cheer");
+            return audio;
         }
 
         // ================================================================ Helpers

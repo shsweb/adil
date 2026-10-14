@@ -6,30 +6,39 @@ using UnityEngine.InputSystem;
 namespace FartRaft
 {
     // Lets you test in the Unity editor without a phone. Disabled on real mobile devices.
-    //   P1: hold A to fart, Z / X to walk     P2: hold L to fart, N / M to walk
-    //   P3: hold Q to fart, 1 / 2 to walk     P4: hold P to fart, 9 / 0 to walk
+    // Each player holds a direction (where the raft should go), like the on-screen joystick:
+    //   P1: W A S D    P2: arrow keys    P3: I J K L    P4: numpad 8 4 5 6
     public class KeyboardControls : MonoBehaviour
     {
         public FartSeat[] seats;
 
 #if ENABLE_INPUT_SYSTEM
-        static readonly Key[] FartKeys = { Key.A, Key.L, Key.Q, Key.P };
-        static readonly Key[] LeftKeys = { Key.Z, Key.N, Key.Digit1, Key.Digit9 };
-        static readonly Key[] RightKeys = { Key.X, Key.M, Key.Digit2, Key.Digit0 };
+        static readonly Key[,] Keys =
+        {
+            { Key.W, Key.A, Key.S, Key.D },
+            { Key.UpArrow, Key.LeftArrow, Key.DownArrow, Key.RightArrow },
+            { Key.I, Key.J, Key.K, Key.L },
+            { Key.Numpad8, Key.Numpad4, Key.Numpad5, Key.Numpad6 },
+        };
 #else
-        static readonly KeyCode[] FartKeys = { KeyCode.A, KeyCode.L, KeyCode.Q, KeyCode.P };
-        static readonly KeyCode[] LeftKeys = { KeyCode.Z, KeyCode.N, KeyCode.Alpha1, KeyCode.Alpha9 };
-        static readonly KeyCode[] RightKeys = { KeyCode.X, KeyCode.M, KeyCode.Alpha2, KeyCode.Alpha0 };
+        static readonly KeyCode[,] Keys =
+        {
+            { KeyCode.W, KeyCode.A, KeyCode.S, KeyCode.D },
+            { KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.DownArrow, KeyCode.RightArrow },
+            { KeyCode.I, KeyCode.J, KeyCode.K, KeyCode.L },
+            { KeyCode.Keypad8, KeyCode.Keypad4, KeyCode.Keypad5, KeyCode.Keypad6 },
+        };
 #endif
 
         void Update()
         {
             if (Application.isMobilePlatform || seats == null) return;
-            for (int i = 0; i < seats.Length && i < FartKeys.Length; i++)
+            for (int i = 0; i < seats.Length && i < Keys.GetLength(0); i++)
             {
                 if (seats[i] == null) continue;
-                seats[i].KeyHeld = Pressed(FartKeys[i]);
-                seats[i].KeyMoveInput = (Pressed(RightKeys[i]) ? 1f : 0f) - (Pressed(LeftKeys[i]) ? 1f : 0f);
+                float x = (Pressed(Keys[i, 3]) ? 1f : 0f) - (Pressed(Keys[i, 1]) ? 1f : 0f);
+                float y = (Pressed(Keys[i, 0]) ? 1f : 0f) - (Pressed(Keys[i, 2]) ? 1f : 0f);
+                seats[i].KeyStickInput = Vector2.ClampMagnitude(new Vector2(x, y), 1f);
             }
         }
 

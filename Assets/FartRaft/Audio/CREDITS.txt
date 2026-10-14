@@ -1,0 +1,21 @@
+All sounds are from freesound.org and released under CC0 (public domain).
+They were trimmed, volume-normalized and converted to mono OGG.
+
+fart_01  Fart #005 by bassimat                   https://freesound.org/s/840755/
+fart_02  Blubberfreak Fart 23 by Blubberfreak    https://freesound.org/s/732936/
+fart_03  Bad Chili Fart.wav (deleted user)       https://freesound.org/s/94989/
+fart_04  FART SOUND 50 by frenkfurth             https://freesound.org/s/663636/
+fart_05  Juicy Fart5 by Zott820                  https://freesound.org/s/183551/
+fart_06  Fart.mp3 by TeddyFerguson               https://freesound.org/s/610067/
+fart_07  Nasty fart by SamsterBirdies            https://freesound.org/s/645339/
+fart_08  Fart 6 by Under7dude                    https://freesound.org/s/163386/
+fart_09  Farts Fake 001. by frenkfurth           https://freesound.org/s/654573/
+fart_11-16  Farts, loud and flabby x7 by peridactyloptrix  https://freesound.org/s/202528/
+
+sfx_bump        boing1.wav by TinTinOko                  https://freesound.org/s/277291/
+sfx_punch       CartoonPunch.wav by nicholasdaryl        https://freesound.org/s/563356/
+sfx_explosion   Cartoon Explosion by modusmogulus        https://freesound.org/s/784205/
+sfx_fall        Cartoon Falling Whistle by se2001        https://freesound.org/s/518104/
+sfx_splash      water splash 2 by swordofkings128        https://freesound.org/s/398039/
+sfx_checkpoint  Ding 1 by D.S.G.                         https://freesound.org/s/241288/
+sfx_cheer       Crowd Cheer 5 by Krizin                  https://freesound.org/s/651646/

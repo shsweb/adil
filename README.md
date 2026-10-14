@@ -6,17 +6,19 @@ water slides high above the clouds.
 
 ## Gameplay
 
-- Each player has a big button in a corner of the screen and stands on the rim of the raft, facing the middle.
-- **Hold** to fart. The gas blasts out behind you and pushes the raft toward the opposite side.
-- **Slide left/right** while holding to walk around the rim and change the push direction.
-- The raft spins when it bumps into things, so everyone has to keep re-positioning.
-- Some parts of the slide have no walls: **fall off and you go back to the last checkpoint** (falls are counted).
-- When **everyone farts at the same time** you get a **SYNC BOOST** (1.5x push).
+- Each player has a **joystick** in a corner of the screen and an animal standing on the rim of the raft.
+- **Push the joystick where you want the raft to go.** Your animal runs around the rim to the opposite side and
+  farts a big green jet, pushing the raft that way. Let go to stop.
+- Steep slides are fast on their own; on flat pools the raft glides for a few seconds after you stop farting.
+- **Spiky obstacles kill** (spiky buoys, spinning spiked arms, swinging pendulums): boom, white flash, back to the
+  last checkpoint. Walls, rocks and wooden blocks only bump you.
+- Some parts of the slide have no walls: **fall off and you go back to the last checkpoint**.
+- When **everyone farts at the same time** you get a **SYNC BOOST**.
 - Each fart drains your gas ring. If it empties, you're out until it refills.
-- Course: spiky bumper walls, spiky buoys, spinning spiked arms, swinging pendulums, sliding blocks, rocks,
-  a rocky canyon, open edges, 3 checkpoints and a finish line. Your best time is saved.
-- HUD: progress bar, timer, fall counter and name tags over each animal.
-- Modes: **Solo** (one player, left and right thumbs), **2, 3 or 4 players**.
+- Course: 4 steep slides and 4 pools, 4 checkpoints and a finish line. Your best time is saved.
+- HUD: progress bar, timer, death counter and name tags over each animal.
+- Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
+- Modes: **Solo**, **2, 3 or 4 players**.
 
 ## Setup
 
@@ -28,12 +30,15 @@ water slides high above the clouds.
 4. Click **Fart Raft > 2. Build Game Scene**. This generates the whole level, raft, characters and UI in `Assets/FartRaft/Scenes/Game.unity`.
 5. Press **Play**. Keyboard controls in the editor:
 
-   | Player | Fart (hold) | Walk around the raft |
-   | --- | --- | --- |
-   | 1 (Capy) | A | Z / X |
-   | 2 (Hippo) | L | N / M |
-   | 3 (Croc) | Q | 1 / 2 |
-   | 4 (Gorilla) | P | 9 / 0 |
+   | Player | Hold a direction (= joystick) |
+   | --- | --- |
+   | 1 (Capy) | W A S D |
+   | 2 (Hippo) | Arrow keys |
+   | 3 (Croc) | I J K L |
+   | 4 (Gorilla) | Numpad 8 4 5 6 |
+
+When updating an existing project, delete the old `Assets/FartRaft/Scripts` and `Assets/FartRaft/Editor`
+folders before copying the new ones (removed scripts would otherwise stay behind and break compiling).
 
    To test real touch controls, install the **Unity Remote 5** app on your phone and pick it in
    *Project Settings > Editor > Device*.
@@ -64,10 +69,10 @@ Publishing costs: Google Play $25 one time, Apple Developer Program $99/year.
 | --- | --- |
 | `Scripts/Raft.cs` | Raft physics (slides down the slide, tilts with the slope, bumper knock-back) |
 | `Scripts/FartSeat.cs` | One player: position on the rim, thrust, gas tank, animation, particles, sound |
-| `Scripts/TouchFartButton.cs` | Multi-touch hold/slide button |
-| `Scripts/GameManager.cs` | Menu, countdown, timer, falls, progress bar, checkpoints, sync boost, best times |
-| `Scripts/FartSound.cs` | Procedural fart sound (no audio files needed) |
-| `Scripts/Spinner.cs`, `Pendulum.cs`, `Mover.cs`, `Bumper.cs`, `Checkpoint.cs`, `FinishLine.cs` | Course pieces |
+| `Scripts/FartJoystick.cs` | Multi-touch joystick (one per player) |
+| `Scripts/GameManager.cs` | Menu, countdown, timer, deaths (crash/fall + respawn), progress bar, checkpoints, sync boost, best times |
+| `Scripts/GameAudio.cs`, `Audio/` | Sound effects; `FartSound.cs` is a generated fallback if no fart clips exist |
+| `Scripts/Spinner.cs`, `Pendulum.cs`, `Mover.cs`, `Bumper.cs`, `Hazard.cs`, `Checkpoint.cs`, `FinishLine.cs` | Course pieces (`Hazard` kills, `Bumper` bounces) |
 | `Scripts/CameraFollow.cs`, `CoursePath.cs` | Camera that looks down the track |
 | `Scripts/WorldLabel.cs`, `UVScroll.cs`, `KeyboardControls.cs` | Name tags, flowing water, editor testing |
 | `Editor/FartRaftBuilder.cs` | Menu commands that configure the project and build the scene |
