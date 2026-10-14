@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
@@ -17,6 +19,10 @@ namespace FartRaft.EditorTools
         const string ScenesFolder = Root + "/Scenes";
         const string ScenePath = ScenesFolder + "/Game.unity";
         const string PuffTexturePath = MaterialsFolder + "/Puff.png";
+        const string ThemePath = Root + "/EnvironmentTheme.asset";
+        const string PostProcessingPath = MaterialsFolder + "/PostProcessing.asset";
+
+        static EnvironmentTheme theme;
 
         static readonly Color[] PlayerColors =
         {
@@ -64,6 +70,7 @@ namespace FartRaft.EditorTools
             EnsureFolder(MaterialsFolder);
             EnsureFolder(ScenesFolder);
             LoadUIResources();
+            theme = LoadTheme();
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var mats = new Mats();
@@ -72,6 +79,7 @@ namespace FartRaft.EditorTools
             var startPoint = BuildCourse(mats, out int checkpointCount);
             var raft = BuildRaft(mats, startPoint, out FartSeat[] seats);
             var cameraFollow = BuildCamera(raft.transform);
+            AddPostProcessing(cameraFollow.GetComponent<Camera>());
 
             var managerGo = new GameObject("GameManager");
             var manager = managerGo.AddComponent<GameManager>();
@@ -94,13 +102,186 @@ namespace FartRaft.EditorTools
                 "or use Unity Remote on a phone for touch.", "OK");
         }
 
+        [MenuItem("Fart Raft/3. Upgrade Graphics To URP (Bloom, Color Grading)")]
+        public static void UpgradeToUrp()
+        {
+            var assetType = FindType("UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset");
+            var rendererType = FindType("UnityEngine.Rendering.Universal.UniversalRendererData");
+            if (assetType == null || rendererType == null)
+            {
+                UnityEditor.PackageManager.Client.Add("com.unity.render-pipelines.universal");
+                EditorUtility.DisplayDialog("Fart Raft",
+                    "Installing the Universal Render Pipeline package.\n\n" +
+                    "Wait until Unity finishes importing (progress bar bottom-right), then click this menu item again.", "OK");
+                return;
+            }
+
+            if (GraphicsSettings.defaultRenderPipeline == null)
+            {
+                EnsureFolder(MaterialsFolder);
+                const string rendererPath = MaterialsFolder + "/URP_Renderer.asset";
+                const string pipelinePath = MaterialsFolder + "/URP_Pipeline.asset";
+
+                var rendererData = AssetDatabase.LoadAssetAtPath(rendererPath, rendererType);
+                if (rendererData == null)
+                {
+                    rendererData = ScriptableObject.CreateInstance(rendererType);
+                    AssetDatabase.CreateAsset(rendererData, rendererPath);
+                }
+
+                var pipeline = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(pipelinePath);
+                if (pipeline == null)
+                {
+                    var create = assetType.GetMethods().FirstOrDefault(mi => mi.Name == "Create" && mi.IsStatic && mi.GetParameters().Length == 1);
+                    if (create == null)
+                    {
+                        Debug.LogError("[Fart Raft] Could not create a URP asset. Create one manually: Assets > Create > Rendering > URP Asset (with Universal Renderer).");
+                        return;
+                    }
+                    pipeline = (RenderPipelineAsset)create.Invoke(null, new object[] { rendererData });
+                    AssetDatabase.CreateAsset(pipeline, pipelinePath);
+                }
+                SetMember(pipeline, "msaaSampleCount", 4);
+
+                GraphicsSettings.defaultRenderPipeline = pipeline;
+                int currentLevel = QualitySettings.GetQualityLevel();
+                for (int i = 0; i < QualitySettings.names.Length; i++)
+                {
+                    QualitySettings.SetQualityLevel(i, false);
+                    QualitySettings.renderPipeline = pipeline;
+                }
+                QualitySettings.SetQualityLevel(currentLevel, false);
+                AssetDatabase.SaveAssets();
+            }
+
+            BuildScene();
+        }
+
+        static EnvironmentTheme LoadTheme()
+        {
+            var loaded = AssetDatabase.LoadAssetAtPath<EnvironmentTheme>(ThemePath);
+            if (loaded == null)
+            {
+                loaded = ScriptableObject.CreateInstance<EnvironmentTheme>();
+                AssetDatabase.CreateAsset(loaded, ThemePath);
+            }
+            return loaded;
+        }
+
+        // ---------------------------------------------------------------- Post-processing (URP only)
+
+        // Uses reflection so the project still compiles without the URP package.
+        static void AddPostProcessing(Camera cam)
+        {
+            if (GraphicsSettings.currentRenderPipeline == null)
+            {
+                Debug.Log("[Fart Raft] Built-in render pipeline: skipping bloom/color grading. Use a URP project for post-processing.");
+                return;
+            }
+
+            var cameraDataType = FindType("UnityEngine.Rendering.Universal.UniversalAdditionalCameraData");
+            if (cameraDataType != null)
+            {
+                var data = cam.GetComponent(cameraDataType);
+                if (data == null) data = cam.gameObject.AddComponent(cameraDataType);
+                SetMember(data, "renderPostProcessing", true);
+                SetMember(data, "antialiasing", "FastApproximateAntialiasing");
+            }
+
+            var volumeType = FindType("UnityEngine.Rendering.Volume");
+            var profileType = FindType("UnityEngine.Rendering.VolumeProfile");
+            if (volumeType == null || profileType == null) return;
+
+            AssetDatabase.DeleteAsset(PostProcessingPath);
+            var profile = ScriptableObject.CreateInstance(profileType);
+            AssetDatabase.CreateAsset(profile, PostProcessingPath);
+
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Tonemapping", ("mode", "ACES"));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.5f), ("threshold", 1f), ("scatter", 0.6f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.ColorAdjustments", ("postExposure", 0.35f), ("contrast", 12f), ("saturation", 20f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Vignette", ("intensity", 0.22f), ("smoothness", 0.4f));
+            EditorUtility.SetDirty(profile);
+
+            var volumeGo = new GameObject("PostProcessing");
+            var volume = volumeGo.AddComponent(volumeType);
+            SetMember(volume, "isGlobal", true);
+            SetMember(volume, "sharedProfile", profile);
+        }
+
+        static void AddOverride(ScriptableObject profile, string typeName, params (string name, object value)[] values)
+        {
+            var type = FindType(typeName);
+            var add = profile.GetType().GetMethod("Add", new[] { typeof(System.Type), typeof(bool) });
+            if (type == null || add == null) return;
+
+            var component = (ScriptableObject)add.Invoke(profile, new object[] { type, true });
+            component.name = type.Name;
+            component.hideFlags = HideFlags.HideInInspector | HideFlags.HideInHierarchy;
+            AssetDatabase.AddObjectToAsset(component, profile);
+
+            foreach (var (name, value) in values)
+            {
+                var field = type.GetField(name);
+                var parameter = field?.GetValue(component);
+                var valueProperty = parameter?.GetType().GetProperties().FirstOrDefault(p => p.Name == "value" && p.CanWrite);
+                if (valueProperty == null) continue;
+                valueProperty.SetValue(parameter, ConvertValue(value, valueProperty.PropertyType));
+            }
+        }
+
+        static System.Type FindType(string fullName)
+        {
+            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var type = assembly.GetType(fullName);
+                if (type != null) return type;
+            }
+            return null;
+        }
+
+        static void SetMember(object target, string name, object value)
+        {
+            var type = target.GetType();
+            var field = type.GetField(name);
+            if (field != null)
+            {
+                field.SetValue(target, ConvertValue(value, field.FieldType));
+                return;
+            }
+            var property = type.GetProperties().FirstOrDefault(p => p.Name == name && p.CanWrite);
+            if (property != null) property.SetValue(target, ConvertValue(value, property.PropertyType));
+        }
+
+        static object ConvertValue(object value, System.Type type)
+        {
+            if (type.IsEnum && value is string s) return System.Enum.Parse(type, s);
+            return value;
+        }
+
         // ---------------------------------------------------------------- Materials
 
         class Mats
         {
-            public readonly Material water = Lit("Water", new Color(0.15f, 0.55f, 0.85f), 0.9f);
-            public readonly Material grass = Lit("Grass", new Color(0.35f, 0.70f, 0.30f), 0.1f);
-            public readonly Material rock = Lit("Rock", new Color(0.55f, 0.50f, 0.45f), 0.15f);
+            public readonly Material water = Lit("Water", new Color(0.12f, 0.62f, 0.78f), 0.92f);
+            public readonly Material grass = Lit("Grass", new Color(0.45f, 0.78f, 0.32f), 0.1f);
+            public readonly Material rock = Lit("Rock", new Color(0.55f, 0.53f, 0.50f), 0.15f);
+            public readonly Material rock2 = Lit("Rock2", new Color(0.45f, 0.43f, 0.42f), 0.15f);
+            public readonly Material rock3 = Lit("Rock3", new Color(0.64f, 0.59f, 0.52f), 0.15f);
+            public readonly Material sand = Lit("Sand", new Color(0.93f, 0.84f, 0.62f), 0.05f);
+            public readonly Material pine = Lit("Pine", new Color(0.13f, 0.45f, 0.30f), 0.1f);
+            public readonly Material bush = Lit("Bush", new Color(0.25f, 0.58f, 0.22f), 0.1f);
+            public readonly Material reed = Lit("Reed", new Color(0.50f, 0.65f, 0.25f), 0.1f);
+            public readonly Material lily = Lit("LilyPad", new Color(0.30f, 0.62f, 0.25f), 0.3f);
+            public readonly Material cloud = Lit("Cloud", Color.white, 0f);
+            public readonly Material mountain = Lit("Mountain", new Color(0.35f, 0.55f, 0.40f), 0f);
+            public readonly Material mountain2 = Lit("Mountain2", new Color(0.45f, 0.58f, 0.48f), 0f);
+            public readonly Material[] flowerHeads =
+            {
+                Lit("FlowerPink", new Color(1.00f, 0.55f, 0.75f), 0.2f),
+                Lit("FlowerYellow", new Color(1.00f, 0.88f, 0.25f), 0.2f),
+                Lit("FlowerWhite", new Color(0.97f, 0.97f, 0.95f), 0.2f),
+                Lit("FlowerPurple", new Color(0.65f, 0.45f, 0.95f), 0.2f),
+            };
             public readonly Material wood = Lit("Wood", new Color(0.60f, 0.40f, 0.22f), 0.2f);
             public readonly Material darkWood = Lit("DarkWood", new Color(0.42f, 0.27f, 0.15f), 0.2f);
             public readonly Material leaves = Lit("Leaves", new Color(0.20f, 0.55f, 0.25f), 0.1f);
@@ -141,6 +322,7 @@ namespace FartRaft.EditorTools
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
             if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
+            mat.enableInstancing = true;
             EditorUtility.SetDirty(mat);
             return mat;
         }
@@ -196,18 +378,75 @@ namespace FartRaft.EditorTools
             var lightGo = new GameObject("Sun");
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.1f;
+            light.intensity = 1.25f;
             light.shadows = LightShadows.Soft;
-            light.color = new Color(1f, 0.96f, 0.88f);
-            lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            light.shadowStrength = 0.6f;
+            light.color = new Color(1f, 0.95f, 0.85f);
+            lightGo.transform.rotation = Quaternion.Euler(45f, -35f, 0f);
 
-            RenderSettings.skybox = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Skybox.mat");
+            var sky = LoadOrCreateMaterial("Sky", Shader.Find("Skybox/Procedural"));
+            if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", new Color(0.45f, 0.62f, 0.95f));
+            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", new Color(0.55f, 0.65f, 0.70f));
+            if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.75f);
+            if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.25f);
+            if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.05f);
+            EditorUtility.SetDirty(sky);
+
+            RenderSettings.skybox = sky;
             RenderSettings.sun = light;
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.62f, 0.75f, 0.95f);
+            RenderSettings.ambientEquatorColor = new Color(0.62f, 0.68f, 0.62f);
+            RenderSettings.ambientGroundColor = new Color(0.38f, 0.33f, 0.27f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.70f, 0.82f, 0.92f);
-            RenderSettings.fogStartDistance = 80f;
-            RenderSettings.fogEndDistance = 220f;
+            RenderSettings.fogColor = new Color(0.72f, 0.84f, 0.95f);
+            RenderSettings.fogStartDistance = 90f;
+            RenderSettings.fogEndDistance = 260f;
+        }
+
+        static void BuildScenery(Transform parent, Mats m, System.Random random)
+        {
+            var scenery = new GameObject("Scenery").transform;
+            scenery.SetParent(parent, false);
+
+            for (int i = 0; i < 16; i++)
+            {
+                float side = i % 2 == 0 ? -1f : 1f;
+                float radius = 25f + R(random) * 18f;
+                Vector3 pos = new Vector3(5f + side * (85f + R(random) * 35f), -4f, -30f + i * 24f + R(random) * 10f);
+                var hill = Prim(PrimitiveType.Sphere, "Mountain", scenery, pos,
+                    new Vector3(radius * 2f, 22f + R(random) * 30f, radius * 2f), R(random) < 0.5f ? m.mountain : m.mountain2, false);
+                NoShadows(hill);
+            }
+
+            for (int i = 0; i < 12; i++)
+            {
+                var cloud = new GameObject("Cloud").transform;
+                cloud.SetParent(scenery, false);
+                cloud.position = new Vector3(-70f + R(random) * 150f, 45f + R(random) * 15f, -20f + i * 30f);
+                int puffs = 3 + random.Next(3);
+                for (int j = 0; j < puffs; j++)
+                {
+                    var puff = Prim(PrimitiveType.Sphere, "Puff", cloud,
+                        new Vector3((j - puffs * 0.5f) * 5f, R(random) * 2f, R(random) * 4f),
+                        new Vector3(9f + R(random) * 8f, 4f + R(random) * 3f, 7f + R(random) * 5f), m.cloud, false);
+                    NoShadows(puff);
+                }
+            }
+        }
+
+        static float R(System.Random random)
+        {
+            return (float)random.NextDouble();
+        }
+
+        static void NoShadows(GameObject go)
+        {
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+            {
+                r.shadowCastingMode = ShadowCastingMode.Off;
+            }
         }
 
         static Transform BuildCourse(Mats m, out int checkpointCount)
@@ -244,8 +483,12 @@ namespace FartRaft.EditorTools
                 right[i] = p[i] + normal * (width[i] * 0.5f * miter);
             }
 
-            var water = Prim(PrimitiveType.Plane, "Water", course, new Vector3(5f, 0f, 135f), new Vector3(14f, 1f, 36f), m.water, false);
-            water.isStatic = true;
+            var water = new GameObject("Water", typeof(MeshFilter), typeof(MeshRenderer));
+            water.transform.SetParent(course, false);
+            water.transform.position = new Vector3(5f, 0f, 135f);
+            water.GetComponent<MeshRenderer>().sharedMaterial = theme.waterMaterial != null ? theme.waterMaterial : m.water;
+            water.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+            water.AddComponent<WaterWaves>();
 
             var banks = new GameObject("Banks").transform;
             banks.SetParent(course, false);
@@ -255,11 +498,14 @@ namespace FartRaft.EditorTools
 
             for (int i = 0; i < n - 1; i++)
             {
-                BuildBank(banks, decor, m, left[i], left[i + 1], -1f, random);
-                BuildBank(banks, decor, m, right[i], right[i + 1], 1f, random);
+                Vector3 r = RightOf((p[i + 1] - p[i]).normalized);
+                BuildBank(banks, decor, m, left[i], left[i + 1], -r, random);
+                BuildBank(banks, decor, m, right[i], right[i + 1], r, random);
             }
-            Wall(banks, "StartWall", left[0] - tangents[0] * 1f, right[0] - tangents[0] * 1f, m.rock);
-            Wall(banks, "EndWall", left[n - 1], right[n - 1], m.rock);
+            BuildBank(banks, decor, m, left[0] - tangents[0], right[0] - tangents[0], -tangents[0], random);
+            BuildBank(banks, decor, m, left[n - 1], right[n - 1], tangents[n - 1], random);
+
+            BuildScenery(course, m, random);
 
             var obstacles = new GameObject("Obstacles").transform;
             obstacles.SetParent(course, false);
@@ -320,55 +566,255 @@ namespace FartRaft.EditorTools
             return Vector3.Lerp(a, b, t) + RightOf((b - a).normalized) * sideOffset;
         }
 
-        static void BuildBank(Transform banks, Transform decor, Mats m, Vector3 a, Vector3 b, float side, System.Random random)
+        const float LandTop = 0.55f;
+
+        // One river bank: invisible wall collider, boulders along the edge, a sand
+        // strip, grass land, and decoration (trees, bushes, flowers, reeds, lily pads).
+        static void BuildBank(Transform banks, Transform decor, Mats m, Vector3 a, Vector3 b, Vector3 outward, System.Random random)
         {
-            Wall(banks, "Wall", a, b, m.rock);
+            Wall(banks, "Wall", a, b);
 
             Vector3 dir = (b - a).normalized;
-            Vector3 outward = RightOf(dir) * side;
-            const float landWidth = 16f;
-            var land = Prim(PrimitiveType.Cube, "Land", banks, (a + b) * 0.5f + outward * (landWidth * 0.5f + 1f),
-                new Vector3(landWidth, 1f, Vector3.Distance(a, b)), m.grass, false);
-            land.transform.rotation = Quaternion.LookRotation(dir);
+            outward.y = 0f;
+            outward.Normalize();
+            float length = Vector3.Distance(a, b);
+            Vector3 mid = (a + b) * 0.5f;
+            Quaternion rotation = Quaternion.LookRotation(dir);
+
+            var sand = Prim(PrimitiveType.Cube, "Sand", banks, mid + outward * 1.8f + Vector3.up * -0.15f,
+                new Vector3(3.6f, 1f, length + 1f), m.sand, false);
+            sand.transform.rotation = rotation;
+            sand.isStatic = true;
+
+            const float landWidth = 20f;
+            var land = Prim(PrimitiveType.Cube, "Land", banks, mid + outward * (3.4f + landWidth * 0.5f) + Vector3.up * (LandTop - 0.5f),
+                new Vector3(landWidth, 1f, length + 1f), theme.grassMaterial != null ? theme.grassMaterial : m.grass, false);
+            land.transform.rotation = rotation;
             land.isStatic = true;
 
-            float length = Vector3.Distance(a, b);
-            for (float d = 2f; d < length; d += 6f)
+            EdgeRocks(decor, m, a, b, outward, random);
+
+            for (float d = 1f; d < length; d += 2.8f)
             {
-                if (random.NextDouble() < 0.35) continue;
-                float off = 3f + (float)random.NextDouble() * 11f;
-                Vector3 pos = a + dir * d + outward * off;
-                if (random.NextDouble() < 0.8) Tree(decor, m, pos, random);
-                else Rock(decor, m, pos, random);
+                Vector3 along = a + dir * d;
+                float roll = R(random);
+                if (roll < 0.22f) Reeds(decor, m, along + outward * (2.4f + R(random) * 1.2f) + Vector3.up * 0.35f, random);
+                else if (roll < 0.36f) LilyPad(decor, m, along - outward * (1.6f + R(random) * 1.5f), random);
+
+                Vector3 pos = along + outward * (4.5f + R(random) * 16f) + Vector3.up * LandTop;
+                float kind = R(random);
+                if (kind < 0.30f)
+                {
+                    if (!TrySpawn(theme.trees, decor, pos, random)) Tree(decor, m, pos, random);
+                }
+                else if (kind < 0.45f)
+                {
+                    if (!TrySpawn(theme.bushes, decor, pos, random)) Bush(decor, m, pos, random);
+                }
+                else if (kind < 0.60f)
+                {
+                    if (!TrySpawn(theme.flowers, decor, pos, random)) Flowers(decor, m, pos, random);
+                }
+                else if (kind < 0.66f)
+                {
+                    if (!TrySpawn(theme.rocks, decor, pos, random)) Rock(decor, m, pos, random);
+                }
             }
         }
 
-        static void Wall(Transform parent, string name, Vector3 a, Vector3 b, Material mat)
+        static void Wall(Transform parent, string name, Vector3 a, Vector3 b)
         {
             Vector3 d = b - a;
-            var go = Prim(PrimitiveType.Cube, name, parent, (a + b) * 0.5f + Vector3.up * 0.3f,
-                new Vector3(2f, 1.6f, d.magnitude + 2f), mat, true);
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.position = (a + b) * 0.5f + Vector3.up * 0.3f;
             go.transform.rotation = Quaternion.LookRotation(d.normalized);
+            go.AddComponent<BoxCollider>().size = new Vector3(2f, 1.6f, d.magnitude + 2f);
             go.isStatic = true;
+        }
+
+        static void EdgeRocks(Transform parent, Mats m, Vector3 a, Vector3 b, Vector3 outward, System.Random random)
+        {
+            Vector3 dir = (b - a).normalized;
+            float length = Vector3.Distance(a, b);
+            Material[] rockMats = { m.rock, m.rock2, m.rock3 };
+            for (float d = 0f; d < length; d += 1.8f)
+            {
+                float s = 1.4f + R(random);
+                Vector3 pos = a + dir * d + outward * (0.2f + R(random) * 0.4f) + Vector3.up * 0.1f;
+                if (TrySpawn(theme.rocks, parent, pos, random)) continue;
+                var rock = Prim(PrimitiveType.Sphere, "EdgeRock", parent, pos,
+                    new Vector3(s * 1.2f, s * (0.55f + R(random) * 0.3f), s), rockMats[random.Next(rockMats.Length)], false);
+                rock.transform.rotation = Quaternion.Euler(R(random) * 10f, R(random) * 360f, R(random) * 10f);
+                rock.isStatic = true;
+            }
         }
 
         static void Tree(Transform parent, Mats m, Vector3 pos, System.Random random)
         {
-            float s = 0.8f + (float)random.NextDouble() * 0.7f;
             var tree = new GameObject("Tree").transform;
             tree.SetParent(parent, false);
             tree.position = pos;
-            tree.localScale = Vector3.one * s;
-            Prim(PrimitiveType.Cylinder, "Trunk", tree, new Vector3(0f, 1.7f, 0f), new Vector3(0.4f, 1.2f, 0.4f), m.trunk, false);
-            Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0f, 3.6f, 0f), Vector3.one * 2.6f,
-                random.NextDouble() < 0.5 ? m.leaves : m.leaves2, false);
+            tree.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
+            tree.localScale = Vector3.one * (0.8f + R(random) * 0.8f);
+
+            if (R(random) < 0.45f)
+            {
+                Prim(PrimitiveType.Cylinder, "Trunk", tree, new Vector3(0f, 0.6f, 0f), new Vector3(0.35f, 0.6f, 0.35f), m.trunk, false);
+                for (int i = 0; i < 3; i++)
+                {
+                    float w = 2.8f - i * 0.65f;
+                    MeshPrim(ConeMesh(), "PineTier", tree, new Vector3(0f, 0.9f + i * 1.05f, 0f), new Vector3(w, 1.9f, w), m.pine);
+                }
+            }
+            else
+            {
+                Material leaves = R(random) < 0.5f ? m.leaves : m.leaves2;
+                Prim(PrimitiveType.Cylinder, "Trunk", tree, new Vector3(0f, 1.1f, 0f), new Vector3(0.4f, 1.1f, 0.4f), m.trunk, false);
+                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0f, 2.9f, 0f), Vector3.one * 2.6f, leaves, false);
+                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0.8f, 2.4f, 0.3f), Vector3.one * 1.8f, leaves, false);
+                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(-0.6f, 2.5f, -0.5f), Vector3.one * 1.9f, leaves, false);
+            }
+        }
+
+        static void Bush(Transform parent, Mats m, Vector3 pos, System.Random random)
+        {
+            var bush = new GameObject("Bush").transform;
+            bush.SetParent(parent, false);
+            bush.position = pos;
+            int count = 2 + random.Next(3);
+            for (int i = 0; i < count; i++)
+            {
+                float s = 0.9f + R(random) * 0.6f;
+                Prim(PrimitiveType.Sphere, "Leaf", bush, new Vector3((R(random) - 0.5f) * 1.4f, s * 0.35f, (R(random) - 0.5f) * 1.4f),
+                    new Vector3(s, s * 0.8f, s), m.bush, false);
+            }
+        }
+
+        static void Flowers(Transform parent, Mats m, Vector3 pos, System.Random random)
+        {
+            var patch = new GameObject("Flowers").transform;
+            patch.SetParent(parent, false);
+            patch.position = pos;
+            int count = 4 + random.Next(4);
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 p = new Vector3((R(random) - 0.5f) * 1.6f, 0f, (R(random) - 0.5f) * 1.6f);
+                Prim(PrimitiveType.Cylinder, "Stem", patch, p + Vector3.up * 0.2f, new Vector3(0.05f, 0.2f, 0.05f), m.reed, false);
+                Prim(PrimitiveType.Sphere, "Head", patch, p + Vector3.up * 0.42f, Vector3.one * 0.22f,
+                    m.flowerHeads[random.Next(m.flowerHeads.Length)], false);
+            }
+            NoShadows(patch.gameObject);
+        }
+
+        static void Reeds(Transform parent, Mats m, Vector3 pos, System.Random random)
+        {
+            var reeds = new GameObject("Reeds").transform;
+            reeds.SetParent(parent, false);
+            reeds.position = pos;
+            int count = 4 + random.Next(4);
+            for (int i = 0; i < count; i++)
+            {
+                float h = 0.6f + R(random) * 0.5f;
+                var stalk = Prim(PrimitiveType.Cylinder, "Reed", reeds,
+                    new Vector3((R(random) - 0.5f) * 0.9f, h, (R(random) - 0.5f) * 0.9f), new Vector3(0.07f, h, 0.07f), m.reed, false);
+                stalk.transform.localRotation = Quaternion.Euler((R(random) - 0.5f) * 14f, 0f, (R(random) - 0.5f) * 14f);
+            }
+            NoShadows(reeds.gameObject);
+        }
+
+        static void LilyPad(Transform parent, Mats m, Vector3 pos, System.Random random)
+        {
+            float s = 1f + R(random) * 0.7f;
+            var pad = Prim(PrimitiveType.Cylinder, "LilyPad", parent, pos + Vector3.up * 0.06f, new Vector3(s, 0.02f, s), m.lily, false);
+            if (R(random) < 0.35f)
+            {
+                Prim(PrimitiveType.Sphere, "LilyFlower", pad.transform, new Vector3(0.15f, 6f, 0.1f), new Vector3(0.25f, 8f, 0.25f), m.flowerHeads[0], false);
+            }
+            NoShadows(pad);
         }
 
         static void Rock(Transform parent, Mats m, Vector3 pos, System.Random random)
         {
-            float s = 0.8f + (float)random.NextDouble() * 1.5f;
-            var rock = Prim(PrimitiveType.Sphere, "Rock", parent, pos + Vector3.up * 0.5f, new Vector3(s * 1.4f, s * 0.8f, s), m.rock, false);
-            rock.transform.rotation = Quaternion.Euler(0f, (float)random.NextDouble() * 360f, 0f);
+            float s = 0.8f + R(random) * 1.5f;
+            var rock = Prim(PrimitiveType.Sphere, "Rock", parent, pos + Vector3.up * 0.2f, new Vector3(s * 1.4f, s * 0.8f, s), m.rock2, false);
+            rock.transform.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
+        }
+
+        static bool TrySpawn(GameObject[] prefabs, Transform parent, Vector3 pos, System.Random random)
+        {
+            if (prefabs == null || prefabs.Length == 0) return false;
+            var prefab = prefabs[random.Next(prefabs.Length)];
+            if (prefab == null) return false;
+
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            go.transform.position = pos;
+            go.transform.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
+            go.transform.localScale = prefab.transform.localScale * (theme.propScale * (0.85f + R(random) * 0.3f));
+            return true;
+        }
+
+        static Mesh coneMesh;
+
+        // 8-sided low-poly cone, base radius 0.5 at y=0, tip at y=1. Saved as an asset so the scene keeps it.
+        static Mesh ConeMesh()
+        {
+            if (coneMesh != null) return coneMesh;
+            string path = MaterialsFolder + "/Cone.asset";
+            coneMesh = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            if (coneMesh != null) return coneMesh;
+
+            const int sides = 8;
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            Vector3 tip = Vector3.up;
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = i * Mathf.PI * 2f / sides;
+                float a1 = (i + 1) * Mathf.PI * 2f / sides;
+                Vector3 p0 = new Vector3(Mathf.Cos(a0) * 0.5f, 0f, Mathf.Sin(a0) * 0.5f);
+                Vector3 p1 = new Vector3(Mathf.Cos(a1) * 0.5f, 0f, Mathf.Sin(a1) * 0.5f);
+                Vector3 sideCenter = (p0 + p1 + tip) / 3f;
+                AddTriangle(vertices, triangles, tip, p0, p1, new Vector3(sideCenter.x, 0f, sideCenter.z));
+                AddTriangle(vertices, triangles, Vector3.zero, p0, p1, Vector3.down);
+            }
+
+            coneMesh = new Mesh { name = "Cone" };
+            coneMesh.SetVertices(vertices);
+            coneMesh.SetTriangles(triangles, 0);
+            coneMesh.RecalculateNormals();
+            coneMesh.RecalculateBounds();
+            AssetDatabase.CreateAsset(coneMesh, path);
+            return coneMesh;
+        }
+
+        static void AddTriangle(List<Vector3> vertices, List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Vector3 outward)
+        {
+            // Unity treats Cross(b - a, c - a) as the front-face normal.
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), outward) < 0f)
+            {
+                Vector3 t = b;
+                b = c;
+                c = t;
+            }
+            int start = vertices.Count;
+            vertices.Add(a);
+            vertices.Add(b);
+            vertices.Add(c);
+            triangles.Add(start);
+            triangles.Add(start + 1);
+            triangles.Add(start + 2);
+        }
+
+        static GameObject MeshPrim(Mesh mesh, string name, Transform parent, Vector3 pos, Vector3 scale, Material mat)
+        {
+            var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localScale = scale;
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+            return go;
         }
 
         static void Barrel(Transform parent, Mats m, Vector3 pos)
