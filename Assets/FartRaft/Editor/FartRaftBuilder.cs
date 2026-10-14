@@ -12,7 +12,7 @@ using UnityEngine.UI;
 namespace FartRaft.EditorTools
 {
     // Menu: "Fart Raft > ..." in the Unity editor top bar.
-    public static class FartRaftBuilder
+    public static partial class FartRaftBuilder
     {
         const string Root = "Assets/FartRaft";
         const string MaterialsFolder = Root + "/Materials";
@@ -105,6 +105,7 @@ namespace FartRaft.EditorTools
 
             LoadUIResources();
             theme = LoadTheme();
+            LoadStageProps(index);
 
             var m = new Mats();
             var random = new System.Random(42 + index);
@@ -536,6 +537,13 @@ namespace FartRaft.EditorTools
             // Segment 9: slide with two counter-rotating spinners.
             CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.35f), 3.8f, 2, 50f);
             CrossSpinner(obstacles, m, tr, tr.IndexAt(9, 0.75f), 3.8f, 2, -50f);
+
+            // Funny stuff: beans power-ups, a punching glove next to the open edge, a jumping fish, a giant beach ball.
+            Beans(obstacles, m, tr, tr.IndexAt(0, 0.80f), 0f);
+            Beans(obstacles, m, tr, tr.IndexAt(7, 0.20f), 0f);
+            BoxingGlove(obstacles, m, tr, tr.IndexAt(2, 0.50f), -1f, 0f);
+            JumpingFish(obstacles, m, tr, tr.IndexAt(10, 0.50f), 0f);
+            BeachBall(obstacles, m, tr, tr.IndexAt(11, 0.30f), 0f);
         }
 
         static void JungleObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
@@ -569,6 +577,14 @@ namespace FartRaft.EditorTools
             CrossSpinner(obstacles, m, tr, tr.IndexAt(13, 0.75f), 3.8f, 2, -50f);
 
             Buoy(obstacles, m, tr, tr.IndexAt(14, 0.50f), -2f);
+
+            Beans(obstacles, m, tr, tr.IndexAt(3, 0.15f), 0f);
+            Beans(obstacles, m, tr, tr.IndexAt(11, 0.15f), 0f);
+            BoxingGlove(obstacles, m, tr, tr.IndexAt(5, 0.30f), -1f, 0f);
+            BoxingGlove(obstacles, m, tr, tr.IndexAt(5, 0.70f), 1f, 0.5f);
+            JumpingFish(obstacles, m, tr, tr.IndexAt(10, 0.50f), 0f);
+            JumpingFish(obstacles, m, tr, tr.IndexAt(14, 0.25f), 0.5f);
+            BeachBall(obstacles, m, tr, tr.IndexAt(15, 0.30f), 0f);
         }
 
         static void VolcanoObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
@@ -609,6 +625,14 @@ namespace FartRaft.EditorTools
             CrossSpinner(obstacles, m, tr, tr.IndexAt(13, 0.75f), 3.6f, 2, -55f);
 
             PendulumArch(obstacles, m, tr, tr.IndexAt(14, 0.50f), 0f);
+
+            Beans(obstacles, m, tr, tr.IndexAt(4, 0.12f), 0f);
+            Beans(obstacles, m, tr, tr.IndexAt(12, 0.12f), 0f);
+            BoxingGlove(obstacles, m, tr, tr.IndexAt(10, 0.30f), -1f, 0f);
+            BoxingGlove(obstacles, m, tr, tr.IndexAt(10, 0.75f), 1f, 0.5f);
+            JumpingFish(obstacles, m, tr, tr.IndexAt(2, 0.55f), 0f);
+            JumpingFish(obstacles, m, tr, tr.IndexAt(14, 0.25f), 0.3f);
+            BeachBall(obstacles, m, tr, tr.IndexAt(15, 0.30f), 0f);
         }
 
         static void BuildSlide(Track tr, Transform parent, Mats m)
@@ -998,7 +1022,8 @@ namespace FartRaft.EditorTools
                     float radius = 3f + R(random) * 5f;
                     float offset = tr.width[k] * 0.5f + 4f + radius + R(random) * 18f;
                     Vector3 p = tr.Point(k, offset * s);
-                    Pillar(env, m, p, tr.pos[k].y - 1.5f - R(random) * 7f, radius, corals[random.Next(corals.Length)], true, random);
+                    var pillar = Pillar(env, m, p, tr.pos[k].y - 1.5f - R(random) * 7f, radius, corals[random.Next(corals.Length)], true, random);
+                    if (R(random) < 0.45f) Spectator(pillar.transform, tr.pos[k], radius, random);
                 }
             }
 
@@ -1068,19 +1093,23 @@ namespace FartRaft.EditorTools
                     float r = R(random) * radius * 0.6f;
                     Vector3 p = pillar.position + new Vector3(Mathf.Cos(a) * r, 0.3f, Mathf.Sin(a) * r);
                     float kind = R(random);
-                    if (kind < 0.5f)
+                    if (kind < 0.45f)
                     {
-                        if (!TrySpawn(theme.trees, pillar, p, random)) Tree(pillar, m, p, random);
+                        if (!TrySpawnFitted(props.trees, pillar, p, 4.5f + R(random) * 3f, true, random)) Tree(pillar, m, p, random);
                     }
-                    else if (kind < 0.65f)
+                    else if (kind < 0.6f)
                     {
-                        if (!TrySpawn(theme.flowers, pillar, p, random)) Mushroom(pillar, m, p, random);
+                        if (!TrySpawnFitted(props.flowers, pillar, p, 0.6f + R(random) * 0.5f, true, random)) Mushroom(pillar, m, p, random);
                     }
-                    else if (kind < 0.85f)
+                    else if (kind < 0.78f)
                     {
-                        if (!TrySpawn(theme.bushes, pillar, p, random)) Bush(pillar, m, p, random);
+                        if (!TrySpawnFitted(props.bushes, pillar, p, 1.2f + R(random) * 0.8f, true, random)) Bush(pillar, m, p, random);
                     }
-                    else if (!TrySpawn(theme.rocks, pillar, p, random))
+                    else if (kind < 0.88f && props.decor.Length > 0)
+                    {
+                        TrySpawnFitted(props.decor, pillar, p, 1.6f + R(random) * 1.4f, false, random);
+                    }
+                    else if (!TrySpawnFitted(props.rocks, pillar, p, 1.3f + R(random) * 1.4f, false, random))
                     {
                         var rock = MeshObject(RockMesh(random.Next(3)), "Rock", pillar, Vector3.zero, Vector3.one * (1.2f + R(random) * 1.5f), m.rock);
                         rock.transform.position = p;
@@ -1144,19 +1173,6 @@ namespace FartRaft.EditorTools
                 Prim(PrimitiveType.Sphere, "Leaf", bush, new Vector3((R(random) - 0.5f) * 1.4f, s * 0.35f, (R(random) - 0.5f) * 1.4f),
                     new Vector3(s, s * 0.8f, s), m.bush, false);
             }
-        }
-
-        static bool TrySpawn(GameObject[] prefabs, Transform parent, Vector3 pos, System.Random random)
-        {
-            if (prefabs == null || prefabs.Length == 0) return false;
-            var prefab = prefabs[random.Next(prefabs.Length)];
-            if (prefab == null) return false;
-
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
-            go.transform.position = pos;
-            go.transform.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
-            go.transform.localScale = prefab.transform.localScale * (theme.propScale * (0.85f + R(random) * 0.3f));
-            return true;
         }
 
         // ================================================================ Raft and characters
@@ -1748,6 +1764,9 @@ namespace FartRaft.EditorTools
             public readonly Material raftBand = Lit("RaftBand", new Color(0.25f, 0.72f, 0.72f), 0.45f);
             public readonly Material raftFloor = Lit("RaftFloor", new Color(0.78f, 0.58f, 0.35f), 0.1f);
             public readonly Material strap = Lit("Strap", new Color(0.80f, 0.20f, 0.20f), 0.3f);
+            public readonly Material glove = Lit("Glove", new Color(0.92f, 0.12f, 0.12f), 0.55f);
+            public readonly Material beansCan = Lit("BeansCan", new Color(0.95f, 0.42f, 0.10f), 0.4f);
+            public readonly Material fish = Lit("Fish", new Color(0.45f, 0.66f, 0.92f), 0.6f);
             public readonly Material[] animalMain =
             {
                 Lit("CapyMain", new Color(0.68f, 0.44f, 0.26f), 0.15f),
@@ -2029,6 +2048,7 @@ namespace FartRaft.EditorTools
             slippery = null;
             fartClips = null;
             meshCounter = 0;
+            ResetPropCaches();
         }
 
         static void SaveMesh(Mesh mesh)
@@ -2236,7 +2256,7 @@ namespace FartRaft.EditorTools
         {
             foreach (var t in root.GetComponentsInChildren<Transform>(true))
             {
-                if (t.GetComponentInParent<Rigidbody>() != null) continue;
+                if (t.GetComponentInParent<Rigidbody>() != null || t.GetComponentInParent<Animator>() != null) continue;
                 GameObjectUtility.SetStaticEditorFlags(t.gameObject, StaticEditorFlags.BatchingStatic);
                 var r = t.GetComponent<Renderer>();
                 if (r != null) r.shadowCastingMode = ShadowCastingMode.Off;

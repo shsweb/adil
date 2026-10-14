@@ -13,6 +13,9 @@ water slides high above the clouds.
 - **Spiky obstacles kill** (spiky buoys, spinning spiked arms, swinging pendulums): boom, white flash, back to the
   last checkpoint. Walls, rocks and wooden blocks only bump you.
 - Some parts of the slide have no walls: **fall off and you go back to the last checkpoint**.
+- Funny obstacles that only knock you around: a **boxing glove** punching out of the wall, a giant **jumping fish**
+  and a rolling **beach ball**.
+- Grab a floating **BEANS** can for 4 seconds of **MEGA FART** (much stronger farts and a full gas tank).
 - When **everyone farts at the same time** you get a **SYNC BOOST**.
 - Each fart drains your gas ring. If it empties, you're out until it refills.
 - **3 stages**, picked with the **STAGE** button on the menu; **NEXT STAGE** on the finish screen goes to the next one:
@@ -56,10 +59,19 @@ folders before copying the new ones (removed scripts would otherwise stay behind
 
 - **Fart Raft > 3. Upgrade Graphics To URP** installs the Universal Render Pipeline (click it again once the
   install finishes), switches the project to it and rebuilds the scene with bloom, tonemapping and color grading.
-- To use real models, import a free nature pack (e.g. *EmbersStorm – Free Nature Pack*, or *Ultimate Nature – Starter*
-  for URP) and select `Assets/FartRaft/EnvironmentTheme`. Drag the pack's tree, bush, rock and flower prefabs into
-  the lists (and optionally a water/grass material), then run **Fart Raft > 2. Build Game Scene** again.
-  Adjust `Prop Scale` if the models are too big or small.
+- **Free Asset Store packs are picked up automatically.** Import any of these (Window > Package Manager > My Assets),
+  then run **Fart Raft > 2. Build Game Scene** again:
+  - [EmbersStorm – Free Nature Pack](https://assetstore.unity.com/packages/3d/environments/embersstorm-free-nature-pack-369910):
+    oaks and flowers (Sunny), pines and plants (Jungle), dead trees (Volcano), rocks everywhere.
+  - [3D Low Poly Nature Packs Free](https://assetstore.unity.com/packages/3d/environments/landscapes/3d-low-poly-nature-packs-free-327057): extra trees and rocks.
+  - [Beach Party & Fun Props Pack](https://assetstore.unity.com/packages/3d/props/exterior/beach-party-fun-props-pack-80918):
+    umbrellas, chairs and sand castles on the Sunny cliffs, and the rolling beach ball.
+  - [Quirky Series – FREE Animals Pack](https://assetstore.unity.com/packages/3d/characters/animals/quirky-series-free-animals-pack-178235):
+    animals watching from the cliffs, and the jumping fish (herring).
+  The Console shows how many models each stage found. Models are sized automatically, and Built-in materials are
+  converted when the project uses URP (and the other way around). These packs are not part of this repo.
+- To choose models yourself, select `Assets/FartRaft/EnvironmentTheme` and drag prefabs into its lists; non-empty
+  lists win over the automatic picks. `Prop Scale` makes every model bigger or smaller.
 - Rebuilding replaces the `Stage*.unity` scenes, so make manual scene edits in a copy.
 
 ## Building for phones

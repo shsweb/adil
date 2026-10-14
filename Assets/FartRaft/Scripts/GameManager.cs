@@ -58,6 +58,9 @@ namespace FartRaft
         public float syncBoost = 1.4f;
         [Tooltip("How far below the slide surface the raft can drop before it counts as a fall.")]
         public float fallDepth = 5f;
+        [Tooltip("Thrust multiplier while the BEANS power-up is active.")]
+        public float beansBoost = 1.8f;
+        public float beansTime = 4f;
         public Difficulty difficulty = Difficulty.Easy;
         [Tooltip("Easy mode: after an OUCH the raft blinks and passes through spiky things for this long.")]
         public float easySafeTime = 2f;
@@ -91,6 +94,7 @@ namespace FartRaft
         float messageHideTime;
         float lastWarningTime = -100f;
         bool ghostActive;
+        float beansUntil = -100f;
         Coroutine routine;
 
         const string DifficultyKey = "difficulty";
@@ -218,6 +222,7 @@ namespace FartRaft
             deaths = 0;
             nextCheckpoint = 0;
             lastWarningTime = -100f;
+            beansUntil = -100f;
             respawnPoint = startPoint;
             SetFlash(0f);
             SetLocked(true);
@@ -287,7 +292,8 @@ namespace FartRaft
             }
 
             syncActive = racing && active >= 2 && farting == active;
-            foreach (var seat in seats) seat.BoostMultiplier = syncActive ? syncBoost : 1f;
+            float boost = (syncActive ? syncBoost : 1f) * (racing && Time.time < beansUntil ? beansBoost : 1f);
+            foreach (var seat in seats) seat.BoostMultiplier = boost;
 
             if (coursePath != null && coursePath.Length > 1)
             {
@@ -405,6 +411,17 @@ namespace FartRaft
             if (impactEffect == null) return;
             impactEffect.transform.position = position + Vector3.up * 0.8f;
             impactEffect.Emit(count);
+        }
+
+        public bool OnBeans(Vector3 position)
+        {
+            if (!racing || dying) return false;
+            beansUntil = Time.time + beansTime;
+            foreach (var seat in seats) seat.ResetGas();
+            PlayImpact(position, 12);
+            Audio.Checkpoint();
+            ShowMessage("BEANS! MEGA FART!", 1.5f);
+            return true;
         }
 
         public void OnCheckpoint(Checkpoint checkpoint)
