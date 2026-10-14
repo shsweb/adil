@@ -729,9 +729,9 @@ namespace FartRaft.EditorTools
 
             var sky = LoadOrCreateMaterial("Sky", Shader.Find("Skybox/Procedural"));
             if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", new Color(0.42f, 0.62f, 0.95f));
-            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", new Color(0.85f, 0.92f, 0.98f));
+            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", new Color(0.45f, 0.68f, 0.92f));
             if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.6f);
-            if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.35f);
+            if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.05f);
             if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.03f);
             EditorUtility.SetDirty(sky);
 
@@ -743,9 +743,9 @@ namespace FartRaft.EditorTools
             RenderSettings.ambientGroundColor = new Color(0.62f, 0.55f, 0.52f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.84f, 0.91f, 0.98f);
-            RenderSettings.fogStartDistance = 45f;
-            RenderSettings.fogEndDistance = 190f;
+            RenderSettings.fogColor = new Color(0.55f, 0.75f, 0.95f);
+            RenderSettings.fogStartDistance = 70f;
+            RenderSettings.fogEndDistance = 260f;
         }
 
         static void BuildEnvironment(Track tr, Transform parent, Mats m, System.Random random)
@@ -926,6 +926,8 @@ namespace FartRaft.EditorTools
 
         // ================================================================ Raft and characters
 
+        const float RaftScale = 0.72f;
+
         static Raft BuildRaft(Mats m, Transform start, out FartSeat[] seats)
         {
             var raftGo = new GameObject("Raft");
@@ -933,7 +935,7 @@ namespace FartRaft.EditorTools
             var body = raftGo.AddComponent<Rigidbody>();
             body.mass = 40f;
             var collider = raftGo.AddComponent<MeshCollider>();
-            collider.sharedMesh = CylinderMesh("RaftCollider", 2.55f, 0.9f, 16, true);
+            collider.sharedMesh = CylinderMesh("RaftCollider", 2.55f * RaftScale, 0.9f, 16, true);
             collider.convex = true;
             SetSlippery(collider);
             var raft = raftGo.AddComponent<Raft>();
@@ -942,22 +944,27 @@ namespace FartRaft.EditorTools
             visual.SetParent(raftGo.transform, false);
             raft.visual = visual;
 
+            // Only the boat is scaled; the animals keep their size.
+            var boat = new GameObject("Boat").transform;
+            boat.SetParent(visual, false);
+            boat.localScale = new Vector3(RaftScale, 0.85f, RaftScale);
+
             var ring = TorusMesh("RaftRing", 2.1f, 0.45f, 28, 10);
-            MeshObject(ring, "Tube", visual, Vector3.zero, Vector3.one, m.raftTube);
-            MeshObject(ring, "TubeBottom", visual, new Vector3(0f, -0.2f, 0f), new Vector3(1.01f, 0.6f, 1.01f), m.raftBand);
-            MeshObject(CylinderMesh("RaftFloor", 1.8f, 0.14f, 20, false), "Floor", visual, new Vector3(0f, 0.02f, 0f), Vector3.one, m.raftFloor);
+            MeshObject(ring, "Tube", boat, Vector3.zero, Vector3.one, m.raftTube);
+            MeshObject(ring, "TubeBottom", boat, new Vector3(0f, -0.2f, 0f), new Vector3(1.01f, 0.6f, 1.01f), m.raftBand);
+            MeshObject(CylinderMesh("RaftFloor", 1.8f, 0.14f, 20, false), "Floor", boat, new Vector3(0f, 0.02f, 0f), Vector3.one, m.raftFloor);
             for (float x = -1.35f; x <= 1.36f; x += 0.45f)
             {
                 float chord = 2f * Mathf.Sqrt(Mathf.Max(0f, 1.75f * 1.75f - x * x));
-                Prim(PrimitiveType.Cube, "PlankLine", visual, new Vector3(x, 0.1f, 0f), new Vector3(0.04f, 0.02f, chord), m.darkWood, false);
+                Prim(PrimitiveType.Cube, "PlankLine", boat, new Vector3(x, 0.1f, 0f), new Vector3(0.04f, 0.02f, chord), m.darkWood, false);
             }
             for (int i = 0; i < 4; i++)
             {
                 float a = (45f + i * 90f) * Mathf.Deg2Rad;
-                var strap = Prim(PrimitiveType.Cube, "Strap", visual, new Vector3(Mathf.Sin(a) * 2.1f, 0f, Mathf.Cos(a) * 2.1f),
+                var strap = Prim(PrimitiveType.Cube, "Strap", boat, new Vector3(Mathf.Sin(a) * 2.1f, 0f, Mathf.Cos(a) * 2.1f),
                     new Vector3(0.28f, 0.98f, 1.0f), m.strap, false);
                 strap.transform.localRotation = Quaternion.Euler(0f, (45f + i * 90f), 0f);
-                var handle = MeshObject(TorusMesh("Handle", 0.22f, 0.05f, 12, 6), "Handle", visual,
+                var handle = MeshObject(TorusMesh("Handle", 0.22f, 0.05f, 12, 6), "Handle", boat,
                     new Vector3(Mathf.Sin(a) * 2.62f, 0.05f, Mathf.Cos(a) * 2.62f), Vector3.one, m.strap);
                 handle.transform.localRotation = Quaternion.Euler(0f, (45f + i * 90f), 90f);
             }
@@ -969,6 +976,8 @@ namespace FartRaft.EditorTools
             for (int i = 0; i < 4; i++)
             {
                 seats[i] = BuildSeat(m, visual, raft, i);
+                seats[i].rimRadius = 2.1f * RaftScale;
+                seats[i].minGap = 40f;
                 seats[i].SetAngle(defaultAngles[i]);
             }
             return raft;
@@ -1019,7 +1028,7 @@ namespace FartRaft.EditorTools
             main.playOnAwake = true;
             main.startLifetime = 1.4f;
             main.startSpeed = 0f;
-            main.startSize = 3.2f;
+            main.startSize = 3.2f * RaftScale;
             main.startColor = new Color(1f, 1f, 1f, 0.8f);
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.maxParticles = 60;
@@ -1300,7 +1309,7 @@ namespace FartRaft.EditorTools
             manager.syncText = Label(hud, "SyncBoost", "SYNC BOOST!", 60, top, new Vector2(0f, -160f), new Vector2(800f, 90f));
             manager.syncText.color = new Color(0.7f, 1f, 0.2f);
             manager.messageText = Label(hud, "Message", "", 110, center, new Vector2(0f, 140f), new Vector2(1400f, 160f));
-            Label(hud, "Hint", "Push your joystick where the raft should go - your animal runs to the other side and farts!",
+            manager.hintText = Label(hud, "Hint", "Push your joystick where the raft should go - your animal runs to the other side and farts!",
                 28, new Vector2(0.5f, 0f), new Vector2(0f, 45f), new Vector2(1100f, 60f));
 
             Vector2[] anchors = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };

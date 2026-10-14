@@ -40,6 +40,7 @@ namespace FartRaft
         public Text syncText;
         public Text finishText;
         public Text deathsText;
+        public Text hintText;
         public Image progressFill;
         public Image flash;
 
@@ -49,8 +50,10 @@ namespace FartRaft
         [Tooltip("How far below the slide surface the raft can drop before it counts as a fall.")]
         public float fallDepth = 5f;
         public Difficulty difficulty = Difficulty.Easy;
-        [Tooltip("Easy mode: a second spiky hit within this many seconds kills.")]
-        public float easyHitWindow = 3f;
+        [Tooltip("Easy mode: right after an OUCH you are safe for this long (hits only bounce).")]
+        public float easySafeTime = 1.5f;
+        [Tooltip("Easy mode: a second spiky hit within this many seconds of an OUCH kills.")]
+        public float easyHitWindow = 3.5f;
         public float easyHitBounce = 9f;
 
         static readonly float[][] SeatAngles =
@@ -126,10 +129,11 @@ namespace FartRaft
             raft.autoForward = easy ? 6f : 0f;
             raft.maxSpeed = easy ? 11f : 0f;
             raft.lockYaw = easy;
+            raft.sideDrag = easy ? 2.5f : 0f;
 
             foreach (var seat in seats)
             {
-                seat.thrust = easy ? 6f : 3f;
+                seat.thrust = easy ? 9f : 3f;
                 seat.startKick = easy ? 1.5f : 0.8f;
                 seat.instantAim = easy;
                 seat.drainPerSecond = easy ? 12f : 22f;
@@ -269,6 +273,7 @@ namespace FartRaft
 
             UpdateHud();
             syncText.enabled = syncActive;
+            if (hintText != null) hintText.enabled = raceTime < 8f;
             if (messageText.enabled && Time.time > messageHideTime) messageText.enabled = false;
         }
 
@@ -279,12 +284,16 @@ namespace FartRaft
             if (difficulty == Difficulty.Easy)
             {
                 float since = Time.time - lastWarningTime;
-                // One obstacle often touches the raft several times in a row; that still counts as one hit.
-                if (since < 0.5f) return;
+                if (since < easySafeTime)
+                {
+                    raft.Bounce(point, easyHitBounce * 0.5f);
+                    return;
+                }
                 if (since > easyHitWindow)
                 {
                     lastWarningTime = Time.time;
                     raft.Bounce(point, easyHitBounce);
+                    raft.PauseAutoForward(1f);
                     PlayImpact(point, 20);
                     Audio.Bump(10f);
                     ShowMessage("OUCH!", 1f);

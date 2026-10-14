@@ -24,8 +24,18 @@ namespace FartRaft
         public float maxSpeed;
         [Tooltip("Keep the raft facing down the track instead of spinning.")]
         public bool lockYaw;
+        [Tooltip("Extra drag across the track, so the raft stops sliding sideways when you let go.")]
+        public float sideDrag;
 
         public Vector3 TrackForward { get; set; } = Vector3.forward;
+
+        float autoForwardPausedUntil;
+
+        // Stops the auto-forward push for a moment, so a bounce does not carry the raft straight back into the obstacle.
+        public void PauseAutoForward(float seconds)
+        {
+            autoForwardPausedUntil = Time.time + seconds;
+        }
 
         [Header("Look")]
         public float bobHeight = 0.05f;
@@ -84,7 +94,12 @@ namespace FartRaft
             if (Grounded)
             {
                 Body.AddForce(-groundNormal * stickAcceleration, ForceMode.Acceleration);
-                if (autoForward > 0f) Body.AddForce(TrackForward * autoForward, ForceMode.Acceleration);
+                if (autoForward > 0f && Time.time >= autoForwardPausedUntil) Body.AddForce(TrackForward * autoForward, ForceMode.Acceleration);
+                if (sideDrag > 0f)
+                {
+                    Vector3 side = flat - TrackForward * Vector3.Dot(flat, TrackForward);
+                    Body.AddForce(-side * sideDrag, ForceMode.Acceleration);
+                }
             }
 
             if (lockYaw)
