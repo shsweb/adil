@@ -5,8 +5,8 @@ using UnityEngine.UI;
 namespace FartRaft
 {
     // On-screen button for one player. Hold to fart, slide left/right while
-    // holding to aim. Each button tracks its own finger, so several players can
-    // press different buttons on the same phone at once.
+    // holding to walk around the raft. Each button tracks its own finger, so
+    // several players can press different buttons on the same phone at once.
     public class TouchFartButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
     {
         public FartSeat seat;
@@ -14,7 +14,7 @@ namespace FartRaft
         public Image gasRing;
         public Text label;
         public Color color = Color.white;
-        public float dragForFullAim = 140f;
+        public float dragForFullSpeed = 120f;
 
         const int NoPointer = int.MinValue;
         int pointerId = NoPointer;
@@ -39,7 +39,7 @@ namespace FartRaft
             if (seat != null)
             {
                 seat.TouchHeld = true;
-                seat.AimInput = 0f;
+                seat.MoveInput = 0f;
             }
         }
 
@@ -47,7 +47,7 @@ namespace FartRaft
         {
             if (eventData.pointerId != pointerId || seat == null) return;
             float scale = canvas != null ? canvas.scaleFactor : 1f;
-            seat.AimInput = Mathf.Clamp((eventData.position.x - pressPosition.x) / (dragForFullAim * scale), -1f, 1f);
+            seat.MoveInput = Mathf.Clamp((eventData.position.x - pressPosition.x) / (dragForFullSpeed * scale), -1f, 1f);
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -67,7 +67,7 @@ namespace FartRaft
             if (seat != null)
             {
                 seat.TouchHeld = false;
-                seat.AimInput = 0f;
+                seat.MoveInput = 0f;
             }
         }
 
@@ -78,13 +78,13 @@ namespace FartRaft
             if (gasRing != null)
             {
                 gasRing.fillAmount = seat.Gas01;
-                gasRing.color = seat.IsExhausted ? new Color(1f, 0.3f, 0.3f, 0.9f) : new Color(0.7f, 1f, 0.3f, 0.9f);
+                gasRing.color = seat.IsExhausted ? new Color(1f, 0.3f, 0.3f, 0.9f) : new Color(0.7f, 1f, 0.2f, 0.95f);
             }
 
             if (face != null)
             {
                 Color c = seat.IsExhausted ? Color.gray : color;
-                c.a = seat.IsFarting ? 0.95f : 0.6f;
+                c.a = seat.IsFarting ? 0.95f : 0.65f;
                 face.color = c;
                 face.rectTransform.localScale = Vector3.one * (seat.TouchHeld ? 0.92f : 1f);
             }

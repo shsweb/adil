@@ -5,42 +5,45 @@ using UnityEngine.InputSystem;
 
 namespace FartRaft
 {
-    // Lets you test in the Unity editor without a phone: hold A, L, Q, P for
-    // players 1-4. Disabled on real mobile devices.
+    // Lets you test in the Unity editor without a phone. Disabled on real mobile devices.
+    //   P1: hold A to fart, Z / X to walk     P2: hold L to fart, N / M to walk
+    //   P3: hold Q to fart, 1 / 2 to walk     P4: hold P to fart, 9 / 0 to walk
     public class KeyboardControls : MonoBehaviour
     {
         public FartSeat[] seats;
 
+#if ENABLE_INPUT_SYSTEM
+        static readonly Key[] FartKeys = { Key.A, Key.L, Key.Q, Key.P };
+        static readonly Key[] LeftKeys = { Key.Z, Key.N, Key.Digit1, Key.Digit9 };
+        static readonly Key[] RightKeys = { Key.X, Key.M, Key.Digit2, Key.Digit0 };
+#else
+        static readonly KeyCode[] FartKeys = { KeyCode.A, KeyCode.L, KeyCode.Q, KeyCode.P };
+        static readonly KeyCode[] LeftKeys = { KeyCode.Z, KeyCode.N, KeyCode.Alpha1, KeyCode.Alpha9 };
+        static readonly KeyCode[] RightKeys = { KeyCode.X, KeyCode.M, KeyCode.Alpha2, KeyCode.Alpha0 };
+#endif
+
         void Update()
         {
             if (Application.isMobilePlatform || seats == null) return;
-            for (int i = 0; i < seats.Length; i++)
+            for (int i = 0; i < seats.Length && i < FartKeys.Length; i++)
             {
-                if (seats[i] != null) seats[i].KeyHeld = IsHeld(i);
+                if (seats[i] == null) continue;
+                seats[i].KeyHeld = Pressed(FartKeys[i]);
+                seats[i].KeyMoveInput = (Pressed(RightKeys[i]) ? 1f : 0f) - (Pressed(LeftKeys[i]) ? 1f : 0f);
             }
         }
 
-        static bool IsHeld(int player)
-        {
 #if ENABLE_INPUT_SYSTEM
+        static bool Pressed(Key key)
+        {
             var keyboard = Keyboard.current;
-            if (keyboard == null) return false;
-            switch (player)
-            {
-                case 0: return keyboard.aKey.isPressed;
-                case 1: return keyboard.lKey.isPressed;
-                case 2: return keyboard.qKey.isPressed;
-                default: return keyboard.pKey.isPressed;
-            }
-#else
-            switch (player)
-            {
-                case 0: return Input.GetKey(KeyCode.A);
-                case 1: return Input.GetKey(KeyCode.L);
-                case 2: return Input.GetKey(KeyCode.Q);
-                default: return Input.GetKey(KeyCode.P);
-            }
-#endif
+            return keyboard != null && keyboard[key].isPressed;
         }
+#else
+        static bool Pressed(KeyCode key)
+        {
+            return Input.GetKey(key);
+        }
+#endif
     }
 }

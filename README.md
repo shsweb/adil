@@ -1,16 +1,21 @@
 # Fart Raft (Unity, iOS + Android)
 
-A mobile party game prototype inspired by *Fart Together*: 2-4 players share one
-phone and steer the same raft with fart power through a river obstacle course.
+A mobile party game prototype inspired by *Fart Together*: 2-4 animals (capybara, hippo,
+croc, gorilla) share one phone and one round inflatable raft, and fart it down floating
+water slides high above the clouds.
 
 ## Gameplay
 
-- Each player has a big button in a corner of the screen.
-- **Hold** to fart and push the raft from your seat. **Slide left/right** while holding to aim.
-- Players on the left push the raft right and players on the right push it left, so you must coordinate.
-- When **everyone farts at the same time** you get a **SYNC BOOST** (1.5x speed).
+- Each player has a big button in a corner of the screen and stands on the rim of the raft, facing the middle.
+- **Hold** to fart. The gas blasts out behind you and pushes the raft toward the opposite side.
+- **Slide left/right** while holding to walk around the rim and change the push direction.
+- The raft spins when it bumps into things, so everyone has to keep re-positioning.
+- Some parts of the slide have no walls: **fall off and you go back to the last checkpoint** (falls are counted).
+- When **everyone farts at the same time** you get a **SYNC BOOST** (1.5x push).
 - Each fart drains your gas ring. If it empties, you're out until it refills.
-- Course: barrels, a spinning bar, spiky buoys (touch = back to checkpoint), sliding blocks, a narrow slalom, 3 checkpoints, and a finish line. Your best time is saved.
+- Course: spiky bumper walls, spiky buoys, spinning spiked arms, swinging pendulums, sliding blocks, rocks,
+  a rocky canyon, open edges, 3 checkpoints and a finish line. Your best time is saved.
+- HUD: progress bar, timer, fall counter and name tags over each animal.
 - Modes: **Solo** (one player, left and right thumbs), **2, 3 or 4 players**.
 
 ## Setup
@@ -21,7 +26,15 @@ phone and steer the same raft with fart power through a river obstacle course.
 2. Copy the `Assets/FartRaft` folder from this repo into your project's `Assets` folder.
 3. In Unity's top menu click **Fart Raft > 1. Configure Project For iOS and Android**.
 4. Click **Fart Raft > 2. Build Game Scene**. This generates the whole level, raft, characters and UI in `Assets/FartRaft/Scenes/Game.unity`.
-5. Press **Play**. In the editor, hold **A / L / Q / P** for players 1-4 (Solo/2P use A and L).
+5. Press **Play**. Keyboard controls in the editor:
+
+   | Player | Fart (hold) | Walk around the raft |
+   | --- | --- | --- |
+   | 1 (Capy) | A | Z / X |
+   | 2 (Hippo) | L | N / M |
+   | 3 (Croc) | Q | 1 / 2 |
+   | 4 (Gorilla) | P | 9 / 0 |
+
    To test real touch controls, install the **Unity Remote 5** app on your phone and pick it in
    *Project Settings > Editor > Device*.
 
@@ -49,13 +62,14 @@ Publishing costs: Google Play $25 one time, Apple Developer Program $99/year.
 
 | Path | What |
 | --- | --- |
-| `Scripts/Raft.cs` | Raft physics (slides on water, visual bobbing) |
-| `Scripts/FartSeat.cs` | One player: thrust, aim, gas tank, particles, sound |
+| `Scripts/Raft.cs` | Raft physics (slides down the slide, tilts with the slope, bumper knock-back) |
+| `Scripts/FartSeat.cs` | One player: position on the rim, thrust, gas tank, animation, particles, sound |
 | `Scripts/TouchFartButton.cs` | Multi-touch hold/slide button |
-| `Scripts/GameManager.cs` | Menu, countdown, timer, checkpoints, sync boost, best times |
+| `Scripts/GameManager.cs` | Menu, countdown, timer, falls, progress bar, checkpoints, sync boost, best times |
 | `Scripts/FartSound.cs` | Procedural fart sound (no audio files needed) |
-| `Scripts/Spinner.cs`, `Mover.cs`, `Hazard.cs`, `Checkpoint.cs`, `FinishLine.cs` | Course pieces |
-| `Scripts/CameraFollow.cs`, `KeyboardControls.cs` | Camera and editor testing |
+| `Scripts/Spinner.cs`, `Pendulum.cs`, `Mover.cs`, `Bumper.cs`, `Checkpoint.cs`, `FinishLine.cs` | Course pieces |
+| `Scripts/CameraFollow.cs`, `CoursePath.cs` | Camera that looks down the track |
+| `Scripts/WorldLabel.cs`, `UVScroll.cs`, `KeyboardControls.cs` | Name tags, flowing water, editor testing |
 | `Editor/FartRaftBuilder.cs` | Menu commands that configure the project and build the scene |
 
 Tuning values (thrust, gas, boost, obstacle speeds) are all editable in the Inspector.

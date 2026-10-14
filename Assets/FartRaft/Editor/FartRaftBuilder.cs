@@ -16,25 +16,28 @@ namespace FartRaft.EditorTools
     {
         const string Root = "Assets/FartRaft";
         const string MaterialsFolder = Root + "/Materials";
+        const string GeneratedFolder = Root + "/Generated";
         const string ScenesFolder = Root + "/Scenes";
         const string ScenePath = ScenesFolder + "/Game.unity";
-        const string PuffTexturePath = MaterialsFolder + "/Puff.png";
         const string ThemePath = Root + "/EnvironmentTheme.asset";
-        const string PostProcessingPath = MaterialsFolder + "/PostProcessing.asset";
-
-        static EnvironmentTheme theme;
+        const string PostProcessingPath = GeneratedFolder + "/PostProcessing.asset";
 
         static readonly Color[] PlayerColors =
         {
-            new Color(0.95f, 0.30f, 0.30f),
-            new Color(0.25f, 0.55f, 1.00f),
-            new Color(0.30f, 0.85f, 0.35f),
-            new Color(1.00f, 0.85f, 0.20f),
+            new Color(0.90f, 0.58f, 0.32f),
+            new Color(0.36f, 0.60f, 0.95f),
+            new Color(0.42f, 0.85f, 0.35f),
+            new Color(0.62f, 0.55f, 0.70f),
         };
 
+        static readonly string[] AnimalNames = { "CAPY", "HIPPO", "CROC", "GORILLA" };
+
+        static EnvironmentTheme theme;
         static Font uiFont;
         static Sprite roundedSprite;
         static Sprite circleSprite;
+
+        // ================================================================ Menus
 
         [MenuItem("Fart Raft/1. Configure Project For iOS and Android")]
         public static void ConfigureMobile()
@@ -67,18 +70,26 @@ namespace FartRaft.EditorTools
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
             EnsureFolder(MaterialsFolder);
             EnsureFolder(ScenesFolder);
+            AssetDatabase.DeleteAsset(GeneratedFolder);
+            EnsureFolder(GeneratedFolder);
+            ResetCaches();
             LoadUIResources();
             theme = LoadTheme();
 
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            var mats = new Mats();
+            var m = new Mats();
+            var random = new System.Random(42);
 
             SetupLighting();
-            var startPoint = BuildCourse(mats, out int checkpointCount);
-            var raft = BuildRaft(mats, startPoint, out FartSeat[] seats);
-            var cameraFollow = BuildCamera(raft.transform);
+            var track = SampleTrack(Waypoints, 1f);
+            var course = BuildCourse(track, m, random, out Transform startPoint, out int checkpointCount);
+            BuildEnvironment(track, course, m, random);
+
+            var raft = BuildRaft(m, startPoint, out FartSeat[] seats);
+            var cameraFollow = BuildCamera(raft.transform, track.pos.ToArray());
             AddPostProcessing(cameraFollow.GetComponent<Camera>());
 
             var managerGo = new GameObject("GameManager");
@@ -88,7 +99,9 @@ namespace FartRaft.EditorTools
             manager.seats = seats;
             manager.startPoint = startPoint;
             manager.cameraFollow = cameraFollow;
+            manager.coursePath = track.pos.ToArray();
             manager.checkpointCount = checkpointCount;
+            manager.impactEffect = BuildImpactEffect(m);
 
             BuildUI(manager, seats);
 
@@ -98,8 +111,8 @@ namespace FartRaft.EditorTools
 
             EditorUtility.DisplayDialog("Fart Raft",
                 "Scene built and saved to " + ScenePath + ".\n\n" +
-                "Press Play. In the editor hold A / L / Q / P for players 1-4, " +
-                "or use Unity Remote on a phone for touch.", "OK");
+                "Press Play. In the editor: hold A / L to fart (players 1 and 2), Z / X and N / M to walk around the raft. " +
+                "Players 3 and 4: Q / P to fart, 1 / 2 and 9 / 0 to walk.", "OK");
         }
 
         [MenuItem("Fart Raft/3. Upgrade Graphics To URP (Bloom, Color Grading)")]
@@ -168,519 +181,691 @@ namespace FartRaft.EditorTools
             return loaded;
         }
 
-        // ---------------------------------------------------------------- Post-processing (URP only)
+        // ================================================================ Track layout
 
-        // Uses reflection so the project still compiles without the URP package.
-        static void AddPostProcessing(Camera cam)
+        enum Edge { Open, Bumper, Rock }
+
+        struct Waypoint
         {
-            if (GraphicsSettings.currentRenderPipeline == null)
+            public Vector3 position;
+            public float width;
+
+            public Waypoint(float x, float y, float z, float width)
             {
-                Debug.Log("[Fart Raft] Built-in render pipeline: skipping bloom/color grading. Use a URP project for post-processing.");
-                return;
-            }
-
-            var cameraDataType = FindType("UnityEngine.Rendering.Universal.UniversalAdditionalCameraData");
-            if (cameraDataType != null)
-            {
-                var data = cam.GetComponent(cameraDataType);
-                if (data == null) data = cam.gameObject.AddComponent(cameraDataType);
-                SetMember(data, "renderPostProcessing", true);
-                SetMember(data, "antialiasing", "FastApproximateAntialiasing");
-            }
-
-            var volumeType = FindType("UnityEngine.Rendering.Volume");
-            var profileType = FindType("UnityEngine.Rendering.VolumeProfile");
-            if (volumeType == null || profileType == null) return;
-
-            AssetDatabase.DeleteAsset(PostProcessingPath);
-            var profile = ScriptableObject.CreateInstance(profileType);
-            AssetDatabase.CreateAsset(profile, PostProcessingPath);
-
-            AddOverride(profile, "UnityEngine.Rendering.Universal.Tonemapping", ("mode", "ACES"));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.5f), ("threshold", 1f), ("scatter", 0.6f));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.ColorAdjustments", ("postExposure", 0.35f), ("contrast", 12f), ("saturation", 20f));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.Vignette", ("intensity", 0.22f), ("smoothness", 0.4f));
-            EditorUtility.SetDirty(profile);
-
-            var volumeGo = new GameObject("PostProcessing");
-            var volume = volumeGo.AddComponent(volumeType);
-            SetMember(volume, "isGlobal", true);
-            SetMember(volume, "sharedProfile", profile);
-        }
-
-        static void AddOverride(ScriptableObject profile, string typeName, params (string name, object value)[] values)
-        {
-            var type = FindType(typeName);
-            var add = profile.GetType().GetMethod("Add", new[] { typeof(System.Type), typeof(bool) });
-            if (type == null || add == null) return;
-
-            var component = (ScriptableObject)add.Invoke(profile, new object[] { type, true });
-            component.name = type.Name;
-            component.hideFlags = HideFlags.HideInInspector | HideFlags.HideInHierarchy;
-            AssetDatabase.AddObjectToAsset(component, profile);
-
-            foreach (var (name, value) in values)
-            {
-                var field = type.GetField(name);
-                var parameter = field?.GetValue(component);
-                var valueProperty = parameter?.GetType().GetProperties().FirstOrDefault(p => p.Name == "value" && p.CanWrite);
-                if (valueProperty == null) continue;
-                valueProperty.SetValue(parameter, ConvertValue(value, valueProperty.PropertyType));
+                position = new Vector3(x, y, z);
+                this.width = width;
             }
         }
 
-        static System.Type FindType(string fullName)
+        // The slide center line: x, height, z, width. It runs downhill the whole way.
+        static readonly Waypoint[] Waypoints =
         {
-            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            new Waypoint(0f, 30f, -12f, 13f),
+            new Waypoint(0f, 29.5f, 22f, 13f),
+            new Waypoint(14f, 27f, 55f, 12f),
+            new Waypoint(24f, 24f, 92f, 11f),
+            new Waypoint(12f, 21f, 128f, 12f),
+            new Waypoint(-12f, 18f, 158f, 12f),
+            new Waypoint(-20f, 15f, 196f, 16f),
+            new Waypoint(-6f, 12f, 236f, 11f),
+            new Waypoint(12f, 9f, 266f, 11f),
+            new Waypoint(14f, 8f, 300f, 15f),
+        };
+
+        // Walls per segment (between waypoint i and i+1). Open edges let you fall off.
+        static readonly Edge[] LeftEdges = { Edge.Rock, Edge.Bumper, Edge.Open, Edge.Bumper, Edge.Bumper, Edge.Rock, Edge.Open, Edge.Bumper, Edge.Rock };
+        static readonly Edge[] RightEdges = { Edge.Rock, Edge.Bumper, Edge.Bumper, Edge.Open, Edge.Bumper, Edge.Rock, Edge.Open, Edge.Bumper, Edge.Rock };
+
+        class Track
+        {
+            public readonly List<Vector3> pos = new List<Vector3>();
+            public readonly List<Vector3> forward = new List<Vector3>();
+            public readonly List<Vector3> right = new List<Vector3>();
+            public readonly List<float> width = new List<float>();
+            public readonly List<float> distance = new List<float>();
+            public readonly List<int> segment = new List<int>();
+            public int Count => pos.Count;
+
+            public Vector3 Edge(int k, float side) => pos[k] + right[k] * (side * width[k] * 0.5f);
+
+            public int IndexAt(int seg, float t)
             {
-                var type = assembly.GetType(fullName);
-                if (type != null) return type;
+                int first = segment.IndexOf(seg);
+                int last = segment.LastIndexOf(seg);
+                if (first < 0) return 0;
+                return Mathf.RoundToInt(Mathf.Lerp(first, last, t));
             }
-            return null;
+
+            public Vector3 Point(int k, float sideOffset) => pos[k] + right[k] * sideOffset;
         }
 
-        static void SetMember(object target, string name, object value)
+        static Track SampleTrack(Waypoint[] w, float step)
         {
-            var type = target.GetType();
-            var field = type.GetField(name);
-            if (field != null)
+            var track = new Track();
+            int n = w.Length;
+            for (int i = 0; i < n - 1; i++)
             {
-                field.SetValue(target, ConvertValue(value, field.FieldType));
-                return;
-            }
-            var property = type.GetProperties().FirstOrDefault(p => p.Name == name && p.CanWrite);
-            if (property != null) property.SetValue(target, ConvertValue(value, property.PropertyType));
-        }
-
-        static object ConvertValue(object value, System.Type type)
-        {
-            if (type.IsEnum && value is string s) return System.Enum.Parse(type, s);
-            return value;
-        }
-
-        // ---------------------------------------------------------------- Materials
-
-        class Mats
-        {
-            public readonly Material water = Lit("Water", new Color(0.12f, 0.62f, 0.78f), 0.92f);
-            public readonly Material grass = Lit("Grass", new Color(0.45f, 0.78f, 0.32f), 0.1f);
-            public readonly Material rock = Lit("Rock", new Color(0.40f, 0.38f, 0.36f), 0.1f);
-            public readonly Material rock2 = Lit("Rock2", new Color(0.31f, 0.30f, 0.30f), 0.1f);
-            public readonly Material rock3 = Lit("Rock3", new Color(0.47f, 0.42f, 0.36f), 0.1f);
-            public readonly Material sand = Lit("Sand", new Color(0.86f, 0.76f, 0.54f), 0.05f);
-            public readonly Material pine = Lit("Pine", new Color(0.13f, 0.45f, 0.30f), 0.1f);
-            public readonly Material bush = Lit("Bush", new Color(0.25f, 0.58f, 0.22f), 0.1f);
-            public readonly Material reed = Lit("Reed", new Color(0.50f, 0.65f, 0.25f), 0.1f);
-            public readonly Material lily = Lit("LilyPad", new Color(0.30f, 0.62f, 0.25f), 0.3f);
-            public readonly Material cloud = Lit("Cloud", Color.white, 0f);
-            public readonly Material mountain = Lit("Mountain", new Color(0.35f, 0.55f, 0.40f), 0f);
-            public readonly Material mountain2 = Lit("Mountain2", new Color(0.45f, 0.58f, 0.48f), 0f);
-            public readonly Material[] flowerHeads =
-            {
-                Lit("FlowerPink", new Color(1.00f, 0.55f, 0.75f), 0.2f),
-                Lit("FlowerYellow", new Color(1.00f, 0.88f, 0.25f), 0.2f),
-                Lit("FlowerWhite", new Color(0.97f, 0.97f, 0.95f), 0.2f),
-                Lit("FlowerPurple", new Color(0.65f, 0.45f, 0.95f), 0.2f),
-            };
-            public readonly Material wood = Lit("Wood", new Color(0.60f, 0.40f, 0.22f), 0.2f);
-            public readonly Material darkWood = Lit("DarkWood", new Color(0.42f, 0.27f, 0.15f), 0.2f);
-            public readonly Material leaves = Lit("Leaves", new Color(0.20f, 0.55f, 0.25f), 0.1f);
-            public readonly Material leaves2 = Lit("Leaves2", new Color(0.40f, 0.65f, 0.20f), 0.1f);
-            public readonly Material trunk = Lit("Trunk", new Color(0.40f, 0.28f, 0.18f), 0.1f);
-            public readonly Material danger = Lit("Danger", new Color(0.90f, 0.15f, 0.15f), 0.4f);
-            public readonly Material metal = Lit("Metal", new Color(0.75f, 0.75f, 0.80f), 0.6f);
-            public readonly Material yellow = Lit("Flag", new Color(1.00f, 0.80f, 0.10f), 0.3f);
-            public readonly Material white = Lit("White", Color.white, 0.4f);
-            public readonly Material black = Lit("Black", new Color(0.05f, 0.05f, 0.05f), 0.4f);
-            public readonly Material barrel = Lit("Barrel", new Color(0.85f, 0.45f, 0.10f), 0.3f);
-            public readonly Material[] players =
-            {
-                Lit("Player1", PlayerColors[0], 0.3f),
-                Lit("Player2", PlayerColors[1], 0.3f),
-                Lit("Player3", PlayerColors[2], 0.3f),
-                Lit("Player4", PlayerColors[3], 0.3f),
-            };
-            public readonly Material puff = PuffMaterial();
-        }
-
-        static Shader LitShader()
-        {
-            if (GraphicsSettings.currentRenderPipeline != null)
-            {
-                var urp = Shader.Find("Universal Render Pipeline/Lit");
-                if (urp != null) return urp;
-                var hdrp = Shader.Find("HDRP/Lit");
-                if (hdrp != null) return hdrp;
-            }
-            return Shader.Find("Standard");
-        }
-
-        static Material Lit(string name, Color color, float smoothness)
-        {
-            var mat = LoadOrCreateMaterial(name, LitShader());
-            mat.color = color;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
-            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
-            if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
-            mat.enableInstancing = true;
-            EditorUtility.SetDirty(mat);
-            return mat;
-        }
-
-        static Material LoadOrCreateMaterial(string name, Shader shader)
-        {
-            string path = MaterialsFolder + "/" + name + ".mat";
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (mat == null)
-            {
-                mat = new Material(shader);
-                AssetDatabase.CreateAsset(mat, path);
-            }
-            else
-            {
-                mat.shader = shader;
-            }
-            return mat;
-        }
-
-        // Sprites/Default is unlit, transparent and works in Built-in and URP.
-        static Material PuffMaterial()
-        {
-            if (!File.Exists(PuffTexturePath))
-            {
-                const int size = 64;
-                var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-                for (int y = 0; y < size; y++)
+                Vector3 p0 = w[Mathf.Max(i - 1, 0)].position;
+                Vector3 p1 = w[i].position;
+                Vector3 p2 = w[i + 1].position;
+                Vector3 p3 = w[Mathf.Min(i + 2, n - 1)].position;
+                int steps = Mathf.Max(2, Mathf.CeilToInt(Vector3.Distance(p1, p2) / step));
+                for (int s = 0; s < steps; s++)
                 {
-                    for (int x = 0; x < size; x++)
+                    float t = (float)s / steps;
+                    track.pos.Add(CatmullRom(p0, p1, p2, p3, t));
+                    track.width.Add(Mathf.Lerp(w[i].width, w[i + 1].width, Mathf.SmoothStep(0f, 1f, t)));
+                    track.segment.Add(i);
+                }
+            }
+            track.pos.Add(w[n - 1].position);
+            track.width.Add(w[n - 1].width);
+            track.segment.Add(n - 2);
+
+            float total = 0f;
+            for (int k = 0; k < track.Count; k++)
+            {
+                Vector3 d = track.pos[Mathf.Min(k + 1, track.Count - 1)] - track.pos[Mathf.Max(k - 1, 0)];
+                d.y = 0f;
+                d.Normalize();
+                track.forward.Add(d);
+                track.right.Add(Vector3.Cross(Vector3.up, d).normalized);
+                if (k > 0) total += Vector3.Distance(track.pos[k], track.pos[k - 1]);
+                track.distance.Add(total);
+            }
+            return track;
+        }
+
+        static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+        {
+            float t2 = t * t;
+            float t3 = t2 * t;
+            return 0.5f * (2f * p1 + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
+        }
+
+        // ================================================================ Course
+
+        static Transform BuildCourse(Track tr, Mats m, System.Random random, out Transform start, out int checkpointCount)
+        {
+            var course = new GameObject("Course").transform;
+
+            BuildSlide(tr, course, m);
+            BuildEdges(tr, course, m, random);
+
+            var obstacles = new GameObject("Obstacles").transform;
+            obstacles.SetParent(course, false);
+
+            // Segment 1: floating spiky buoys.
+            Buoy(obstacles, m, tr, tr.IndexAt(1, 0.30f), -3f);
+            Buoy(obstacles, m, tr, tr.IndexAt(1, 0.55f), 3f);
+            Buoy(obstacles, m, tr, tr.IndexAt(1, 0.80f), 0f);
+
+            // Segment 2: four-arm spinner with an open edge on the left.
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(2, 0.55f), 4.4f, 4, 45f);
+
+            // Segment 3: rocks in the water, open edge on the right.
+            WaterRock(obstacles, m, tr, tr.IndexAt(3, 0.40f), 2.5f, random);
+            WaterRock(obstacles, m, tr, tr.IndexAt(3, 0.72f), -2.5f, random);
+
+            // Segment 4: swinging pendulums.
+            PendulumArch(obstacles, m, tr, tr.IndexAt(4, 0.30f), 0f);
+            PendulumArch(obstacles, m, tr, tr.IndexAt(4, 0.65f), 0.5f);
+
+            // Segment 5: rocky canyon with buoys.
+            Buoy(obstacles, m, tr, tr.IndexAt(5, 0.30f), 2f);
+            Buoy(obstacles, m, tr, tr.IndexAt(5, 0.50f), -3f);
+            Buoy(obstacles, m, tr, tr.IndexAt(5, 0.72f), 1.5f);
+
+            // Segment 6: wide open section with sliding blocks.
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(6, 0.35f), 0f);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(6, 0.65f), 0.5f);
+
+            // Segment 7: two counter-rotating spinners.
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(7, 0.30f), 4.2f, 2, 60f);
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(7, 0.70f), 4.2f, 2, -60f);
+
+            int[] checkpointSegments = { 3, 5, 7 };
+            for (int i = 0; i < checkpointSegments.Length; i++)
+            {
+                BuildCheckpoint(course, m, tr, tr.IndexAt(checkpointSegments[i], 0.05f), i);
+            }
+            checkpointCount = checkpointSegments.Length;
+
+            BuildStartArch(course, m, tr, 12);
+            BuildFinish(course, m, tr, tr.IndexAt(8, 0.55f));
+
+            start = new GameObject("StartPoint").transform;
+            start.SetParent(course, false);
+            start.position = tr.pos[6] + Vector3.up * 0.9f;
+            start.rotation = Quaternion.LookRotation(tr.forward[6]);
+            return course;
+        }
+
+        static void BuildSlide(Track tr, Transform parent, Mats m)
+        {
+            int count = tr.Count;
+
+            // Water surface: shared-vertex ribbon so the UVs can flow downstream.
+            var vertices = new Vector3[count * 2];
+            var uv = new Vector2[count * 2];
+            var triangles = new int[(count - 1) * 6];
+            for (int k = 0; k < count; k++)
+            {
+                vertices[k * 2] = tr.Edge(k, -1f);
+                vertices[k * 2 + 1] = tr.Edge(k, 1f);
+                float v = tr.distance[k] / 8f;
+                uv[k * 2] = new Vector2(0f, v);
+                uv[k * 2 + 1] = new Vector2(1f, v);
+            }
+            for (int k = 0; k < count - 1; k++)
+            {
+                int a = k * 2, b = a + 1, c = a + 2, d = a + 3;
+                int t = k * 6;
+                triangles[t] = a;
+                triangles[t + 1] = c;
+                triangles[t + 2] = b;
+                triangles[t + 3] = b;
+                triangles[t + 4] = c;
+                triangles[t + 5] = d;
+            }
+            var floorMesh = new Mesh { name = "SlideWater", vertices = vertices, uv = uv, triangles = triangles };
+            floorMesh.RecalculateNormals();
+            floorMesh.RecalculateBounds();
+            SaveMesh(floorMesh);
+
+            var water = MeshObject(floorMesh, "SlideWater", parent, Vector3.zero, Vector3.one,
+                theme.waterMaterial != null ? theme.waterMaterial : m.slideWater);
+            water.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+            var floorCollider = water.AddComponent<MeshCollider>();
+            floorCollider.sharedMesh = floorMesh;
+            SetSlippery(floorCollider);
+            water.AddComponent<UVScroll>().speed = new Vector2(0f, -0.45f);
+
+            // Slide body underneath (visible when you look over an open edge).
+            var sideVerts = new List<Vector3>();
+            var sideTris = new List<int>();
+            Vector3 down = Vector3.down * 1.4f;
+            for (int k = 0; k < count - 1; k++)
+            {
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    Vector3 a = tr.Edge(k, s), b = tr.Edge(k + 1, s);
+                    AddQuad(sideVerts, sideTris, a, b, b + down, a + down, tr.right[k] * s);
+                }
+                Vector3 l0 = tr.Edge(k, -1f) + down, r0 = tr.Edge(k, 1f) + down;
+                Vector3 l1 = tr.Edge(k + 1, -1f) + down, r1 = tr.Edge(k + 1, 1f) + down;
+                AddQuad(sideVerts, sideTris, l0, r0, r1, l1, Vector3.down);
+            }
+            int last = count - 1;
+            AddQuad(sideVerts, sideTris, tr.Edge(0, -1f), tr.Edge(0, 1f), tr.Edge(0, 1f) + down, tr.Edge(0, -1f) + down, -tr.forward[0]);
+            AddQuad(sideVerts, sideTris, tr.Edge(last, -1f), tr.Edge(last, 1f), tr.Edge(last, 1f) + down, tr.Edge(last, -1f) + down, tr.forward[last]);
+            MeshObject(BuildFlatMesh("SlideBody", sideVerts, sideTris), "SlideBody", parent, Vector3.zero, Vector3.one, m.slideBody);
+
+            // White foam lines along both edges.
+            var foamVerts = new List<Vector3>();
+            var foamTris = new List<int>();
+            Vector3 lift = Vector3.up * 0.03f;
+            for (int k = 0; k < count - 1; k++)
+            {
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    Vector3 a = tr.Edge(k, s) + lift, b = tr.Edge(k + 1, s) + lift;
+                    Vector3 ai = a - tr.right[k] * (s * 0.6f), bi = b - tr.right[k + 1] * (s * 0.6f);
+                    AddQuad(foamVerts, foamTris, a, b, bi, ai, Vector3.up);
+                }
+            }
+            var foam = MeshObject(BuildFlatMesh("SlideFoam", foamVerts, foamTris), "SlideFoam", parent, Vector3.zero, Vector3.one, m.foam);
+            foam.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        static void BuildEdges(Track tr, Transform parent, Mats m, System.Random random)
+        {
+            var walls = new GameObject("Walls").transform;
+            walls.SetParent(parent, false);
+
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Edge[] edges = s < 0 ? LeftEdges : RightEdges;
+                for (int k = 0; k < tr.Count - 1; k++)
+                {
+                    Edge edge = edges[tr.segment[k]];
+                    if (edge == Edge.Bumper && k % 3 == 0)
                     {
-                        float dx = (x + 0.5f) / size * 2f - 1f;
-                        float dy = (y + 0.5f) / size * 2f - 1f;
-                        float a = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
-                        tex.SetPixel(x, y, new Color(1f, 1f, 1f, a * a));
+                        BumperPiece(walls, m, tr.Edge(k, s), tr.Edge(Mathf.Min(k + 3, tr.Count - 1), s), tr.right[k] * s);
+                    }
+                    else if (edge == Edge.Rock && k % 2 == 0)
+                    {
+                        Vector3 pos = tr.Edge(k, s) + tr.right[k] * (s * (0.9f + R(random) * 0.5f)) + Vector3.up * 0.2f;
+                        WallRock(walls, m, pos, 2.2f + R(random) * 1.6f, random);
                     }
                 }
-                File.WriteAllBytes(PuffTexturePath, tex.EncodeToPNG());
-                Object.DestroyImmediate(tex);
-                AssetDatabase.ImportAsset(PuffTexturePath);
             }
 
-            var mat = LoadOrCreateMaterial("Puff", Shader.Find("Sprites/Default"));
-            mat.mainTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(PuffTexturePath);
-            EditorUtility.SetDirty(mat);
-            return mat;
+            // Close the start and the end so the raft cannot slide off backwards or past the finish.
+            int last = tr.Count - 1;
+            RockRow(walls, m, tr.Edge(0, -1f) - tr.forward[0], tr.Edge(0, 1f) - tr.forward[0], random);
+            RockRow(walls, m, tr.Edge(last, -1f) + tr.forward[last], tr.Edge(last, 1f) + tr.forward[last], random);
         }
 
-        // ---------------------------------------------------------------- Environment
+        static void RockRow(Transform parent, Mats m, Vector3 a, Vector3 b, System.Random random)
+        {
+            float length = Vector3.Distance(a, b);
+            for (float d = 0f; d <= length; d += 2f)
+            {
+                WallRock(parent, m, Vector3.Lerp(a, b, d / length) + Vector3.up * 0.2f, 2.4f + R(random) * 1.2f, random);
+            }
+        }
+
+        static void BumperPiece(Transform parent, Mats m, Vector3 a, Vector3 b, Vector3 outward)
+        {
+            Vector3 d = b - a;
+            Vector3 offset = outward * 0.35f + Vector3.up * 0.45f;
+            var go = Prim(PrimitiveType.Cylinder, "Bumper", parent, (a + b) * 0.5f + offset,
+                new Vector3(0.9f, d.magnitude * 0.5f + 0.15f, 0.9f), m.bumper, true);
+            go.transform.rotation = Quaternion.FromToRotation(Vector3.up, d.normalized);
+            go.AddComponent<Bumper>().bounce = 5f;
+
+            for (int j = 0; j < 2; j++)
+            {
+                Vector3 p = Vector3.Lerp(a, b, 0.25f + 0.5f * j) + offset;
+                Spike(parent, m, p - outward * 0.35f, -outward, 0.28f, 0.5f);
+                Spike(parent, m, p + Vector3.up * 0.35f, Vector3.up, 0.24f, 0.4f);
+            }
+        }
+
+        static void Spike(Transform parent, Mats m, Vector3 worldPos, Vector3 direction, float width, float length)
+        {
+            var spike = MeshObject(ConeMesh(), "Spike", null, worldPos, new Vector3(width, length, width), m.spike);
+            spike.transform.rotation = Quaternion.FromToRotation(Vector3.up, direction.normalized);
+            spike.transform.SetParent(parent, true);
+        }
+
+        static void WallRock(Transform parent, Mats m, Vector3 pos, float size, System.Random random)
+        {
+            var mesh = RockMesh(random.Next(3));
+            var rock = MeshObject(mesh, "Rock", parent, pos,
+                new Vector3(size * (0.9f + R(random) * 0.3f), size * (0.7f + R(random) * 0.5f), size * (0.9f + R(random) * 0.3f)),
+                R(random) < 0.5f ? m.rock : m.rock2);
+            rock.transform.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
+            var collider = rock.AddComponent<MeshCollider>();
+            collider.sharedMesh = mesh;
+            collider.convex = true;
+            rock.isStatic = true;
+        }
+
+        // ================================================================ Obstacles
+
+        static void Buoy(Transform parent, Mats m, Track tr, int k, float sideOffset)
+        {
+            Vector3 pos = tr.Point(k, sideOffset);
+            var buoy = Prim(PrimitiveType.Sphere, "Buoy", parent, pos + Vector3.up * 0.45f, Vector3.one * 1.7f, m.buoy, true);
+            buoy.AddComponent<Bumper>().bounce = 7f;
+            Prim(PrimitiveType.Cylinder, "Band", buoy.transform, Vector3.zero, new Vector3(1.04f, 0.08f, 1.04f), m.white, false);
+            for (int i = 0; i < 6; i++)
+            {
+                float a = i * 60f * Mathf.Deg2Rad;
+                Vector3 dir = new Vector3(Mathf.Cos(a), 0.45f, Mathf.Sin(a)).normalized;
+                Spike(buoy.transform, m, buoy.transform.position + dir * 0.8f, dir, 0.3f, 0.5f);
+            }
+            Spike(buoy.transform, m, buoy.transform.position + Vector3.up * 0.82f, Vector3.up, 0.3f, 0.5f);
+        }
+
+        static void CrossSpinner(Transform parent, Mats m, Track tr, int k, float armLength, int arms, float speed)
+        {
+            Vector3 pos = tr.pos[k];
+            Prim(PrimitiveType.Cylinder, "Hub", parent, pos + Vector3.up * 0.6f, new Vector3(1.4f, 0.6f, 1.4f), m.metal, true);
+
+            var pivot = new GameObject("Spinner");
+            pivot.transform.SetParent(parent, false);
+            pivot.transform.position = pos;
+            pivot.AddComponent<Rigidbody>().isKinematic = true;
+            pivot.AddComponent<Spinner>().degreesPerSecond = speed;
+            pivot.AddComponent<Bumper>().bounce = 8f;
+
+            for (int i = 0; i < arms; i++)
+            {
+                var arm = new GameObject("Arm").transform;
+                arm.SetParent(pivot.transform, false);
+                arm.localRotation = Quaternion.Euler(0f, i * 360f / arms, 0f);
+                Prim(PrimitiveType.Cube, "Beam", arm, new Vector3(0f, 0.55f, armLength * 0.5f + 0.5f), new Vector3(0.6f, 0.6f, armLength), m.magenta, true);
+                for (int j = 1; j <= 3; j++)
+                {
+                    float z = 0.5f + armLength * j / 4f;
+                    var spikeA = MeshObject(ConeMesh(), "Spike", arm, new Vector3(0.35f, 0.55f, z), new Vector3(0.25f, 0.45f, 0.25f), m.spike);
+                    spikeA.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
+                    var spikeB = MeshObject(ConeMesh(), "Spike", arm, new Vector3(-0.35f, 0.55f, z), new Vector3(0.25f, 0.45f, 0.25f), m.spike);
+                    spikeB.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                }
+            }
+        }
+
+        static void WaterRock(Transform parent, Mats m, Track tr, int k, float sideOffset, System.Random random)
+        {
+            WallRock(parent, m, tr.Point(k, sideOffset) + Vector3.up * 0.1f, 2.4f, random);
+            parent.GetChild(parent.childCount - 1).gameObject.AddComponent<Bumper>().bounce = 4f;
+        }
+
+        static void PendulumArch(Transform parent, Mats m, Track tr, int k, float phase)
+        {
+            Vector3 pos = tr.pos[k];
+            Quaternion rotation = Quaternion.LookRotation(tr.forward[k]);
+            float half = tr.width[k] * 0.5f + 0.6f;
+            const float height = 6.5f;
+
+            var arch = new GameObject("PendulumArch").transform;
+            arch.SetParent(parent, false);
+            arch.SetPositionAndRotation(pos, rotation);
+            Prim(PrimitiveType.Cylinder, "Post", arch, new Vector3(-half, height * 0.5f, 0f), new Vector3(0.5f, height * 0.5f, 0.5f), m.wood, false);
+            Prim(PrimitiveType.Cylinder, "Post", arch, new Vector3(half, height * 0.5f, 0f), new Vector3(0.5f, height * 0.5f, 0.5f), m.wood, false);
+            var beam = Prim(PrimitiveType.Cylinder, "Beam", arch, new Vector3(0f, height, 0f), new Vector3(0.45f, half + 0.3f, 0.45f), m.wood, false);
+            beam.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+
+            var pivot = new GameObject("Pendulum");
+            pivot.transform.SetParent(arch, false);
+            pivot.transform.localPosition = new Vector3(0f, height, 0f);
+            pivot.AddComponent<Rigidbody>().isKinematic = true;
+            var pendulum = pivot.AddComponent<Pendulum>();
+            pendulum.phase = phase;
+            pivot.AddComponent<Bumper>().bounce = 9f;
+
+            const float armLength = 5.6f;
+            Prim(PrimitiveType.Cylinder, "Rope", pivot.transform, new Vector3(0f, -armLength * 0.5f, 0f), new Vector3(0.12f, armLength * 0.5f, 0.12f), m.darkWood, false);
+            var block = Prim(PrimitiveType.Cube, "Block", pivot.transform, new Vector3(0f, -armLength - 0.1f, 0f), new Vector3(1.8f, 1.6f, 1.8f), m.magenta, true);
+            for (int s = -1; s <= 1; s += 2)
+            {
+                var spike = MeshObject(ConeMesh(), "Spike", block.transform, new Vector3(0.5f * s, 0f, 0f), new Vector3(0.3f, 0.4f, 0.3f), m.spike);
+                spike.transform.localRotation = Quaternion.Euler(0f, 0f, -90f * s);
+            }
+        }
+
+        static void SlidingBlock(Transform parent, Mats m, Track tr, int k, float phase)
+        {
+            float travel = tr.width[k] - 5f;
+            Vector3 start = tr.Point(k, -travel * 0.5f) + Vector3.up * 0.6f;
+            var block = Prim(PrimitiveType.Cube, "SlidingBlock", parent, start, new Vector3(3f, 1.3f, 1.3f), m.wood, true);
+            block.transform.rotation = Quaternion.LookRotation(tr.forward[k]);
+            Prim(PrimitiveType.Cube, "Stripe", block.transform, new Vector3(0f, 0.2f, 0f), new Vector3(1.02f, 0.25f, 1.02f), m.buoy, false);
+            block.AddComponent<Rigidbody>().isKinematic = true;
+            var mover = block.AddComponent<Mover>();
+            mover.offset = tr.right[k] * travel;
+            mover.period = 3.2f;
+            mover.phase = phase;
+            block.AddComponent<Bumper>().bounce = 6f;
+        }
+
+        static void BuildCheckpoint(Transform parent, Mats m, Track tr, int k, int index)
+        {
+            var go = new GameObject("Checkpoint" + (index + 1));
+            go.transform.SetParent(parent, false);
+            go.transform.position = tr.pos[k] + Vector3.up * 0.9f;
+            go.transform.rotation = Quaternion.LookRotation(tr.forward[k]);
+            var trigger = go.AddComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.center = new Vector3(0f, 1.2f, 0f);
+            trigger.size = new Vector3(tr.width[k] + 6f, 6f, 2f);
+            go.AddComponent<Checkpoint>().index = index;
+
+            float half = tr.width[k] * 0.5f + 0.8f;
+            Prim(PrimitiveType.Cylinder, "Pole", go.transform, new Vector3(-half, 2.5f, 0f), new Vector3(0.3f, 3.2f, 0.3f), m.bamboo, false);
+            Prim(PrimitiveType.Cylinder, "Pole", go.transform, new Vector3(half, 2.5f, 0f), new Vector3(0.3f, 3.2f, 0.3f), m.bamboo, false);
+            var board = Prim(PrimitiveType.Cube, "Sign", go.transform, new Vector3(-half + 2.6f, 5.2f, 0f), new Vector3(5f, 1.4f, 0.3f), m.signBlue, false);
+            Text3D(board.transform.parent, "CHECKPOINT", board.transform.localPosition + new Vector3(0f, 0f, -0.2f), 0.06f, new Color(1f, 0.85f, 0.2f));
+            Prim(PrimitiveType.Cube, "Flag", go.transform, new Vector3(half - 0.6f, 5.4f, 0f), new Vector3(1.2f, 0.8f, 0.06f), m.signYellow, false);
+        }
+
+        static void BuildStartArch(Transform parent, Mats m, Track tr, int k)
+        {
+            var arch = new GameObject("StartArch").transform;
+            arch.SetParent(parent, false);
+            arch.SetPositionAndRotation(tr.pos[k], Quaternion.LookRotation(tr.forward[k]));
+            float half = tr.width[k] * 0.5f + 0.8f;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Prim(PrimitiveType.Cylinder, "Bamboo", arch, new Vector3(half * s, 3.5f, 0f), new Vector3(0.55f, 3.5f, 0.55f), m.bamboo, false);
+                for (int j = 0; j < 3; j++)
+                {
+                    Prim(PrimitiveType.Cylinder, "Ring", arch, new Vector3(half * s, 1.5f + j * 2f, 0f), new Vector3(0.62f, 0.06f, 0.62f), m.darkWood, false);
+                }
+                Prim(PrimitiveType.Sphere, "Leaves", arch, new Vector3(half * s, 7.3f, 0f), new Vector3(1.8f, 0.7f, 1.8f), m.leaves, false);
+            }
+            var bar = Prim(PrimitiveType.Cylinder, "Bar", arch, new Vector3(0f, 6.6f, 0f), new Vector3(0.45f, half, 0.45f), m.bamboo, false);
+            bar.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            Prim(PrimitiveType.Cube, "Sign", arch, new Vector3(0f, 5.4f, 0f), new Vector3(5.2f, 1.8f, 0.3f), m.signBlue, false);
+            Text3D(arch, "START", new Vector3(0f, 5.4f, -0.2f), 0.1f, new Color(1f, 0.85f, 0.2f));
+        }
+
+        static void BuildFinish(Transform parent, Mats m, Track tr, int k)
+        {
+            var go = new GameObject("FinishLine");
+            go.transform.SetParent(parent, false);
+            go.transform.position = tr.pos[k] + Vector3.up * 0.9f;
+            go.transform.rotation = Quaternion.LookRotation(tr.forward[k]);
+            var trigger = go.AddComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.center = new Vector3(0f, 1.2f, 0f);
+            trigger.size = new Vector3(tr.width[k] + 6f, 6f, 2f);
+            go.AddComponent<FinishLine>();
+
+            float half = tr.width[k] * 0.5f + 0.8f;
+            Prim(PrimitiveType.Cylinder, "Pole", go.transform, new Vector3(-half, 2.6f, 0f), new Vector3(0.4f, 3.2f, 0.4f), m.white, false);
+            Prim(PrimitiveType.Cylinder, "Pole", go.transform, new Vector3(half, 2.6f, 0f), new Vector3(0.4f, 3.2f, 0.4f), m.white, false);
+            int tiles = 14;
+            float tile = half * 2f / tiles;
+            for (int i = 0; i < tiles; i++)
+            {
+                for (int row = 0; row < 2; row++)
+                {
+                    Prim(PrimitiveType.Cube, "Checker", go.transform, new Vector3(-half + tile * (i + 0.5f), 5.3f + row * tile, 0f),
+                        new Vector3(tile, tile, 0.2f), (i + row) % 2 == 0 ? m.white : m.black, false);
+                }
+            }
+            Text3D(go.transform, "FINISH", new Vector3(0f, 6.9f, -0.2f), 0.1f, new Color(1f, 0.85f, 0.2f));
+        }
+
+        static void Text3D(Transform parent, string text, Vector3 localPos, float size, Color color)
+        {
+            var go = new GameObject("Text_" + text);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            var mesh = go.AddComponent<TextMesh>();
+            mesh.text = text;
+            mesh.font = uiFont;
+            mesh.fontSize = 96;
+            mesh.fontStyle = FontStyle.Bold;
+            mesh.characterSize = size;
+            mesh.anchor = TextAnchor.MiddleCenter;
+            mesh.alignment = TextAlignment.Center;
+            mesh.color = color;
+            go.GetComponent<MeshRenderer>().sharedMaterial = uiFont.material;
+        }
+
+        // ================================================================ Environment
 
         static void SetupLighting()
         {
             var lightGo = new GameObject("Sun");
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.25f;
+            light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.6f;
-            light.color = new Color(1f, 0.95f, 0.85f);
-            lightGo.transform.rotation = Quaternion.Euler(45f, -35f, 0f);
+            light.shadowStrength = 0.45f;
+            light.color = new Color(1f, 0.96f, 0.9f);
+            lightGo.transform.rotation = Quaternion.Euler(55f, -30f, 0f);
 
             var sky = LoadOrCreateMaterial("Sky", Shader.Find("Skybox/Procedural"));
-            if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", new Color(0.45f, 0.62f, 0.95f));
-            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", new Color(0.55f, 0.65f, 0.70f));
-            if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.75f);
-            if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.25f);
-            if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.05f);
+            if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", new Color(0.42f, 0.62f, 0.95f));
+            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", new Color(0.85f, 0.92f, 0.98f));
+            if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.6f);
+            if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.35f);
+            if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.03f);
             EditorUtility.SetDirty(sky);
 
             RenderSettings.skybox = sky;
             RenderSettings.sun = light;
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.62f, 0.75f, 0.95f);
-            RenderSettings.ambientEquatorColor = new Color(0.62f, 0.68f, 0.62f);
-            RenderSettings.ambientGroundColor = new Color(0.38f, 0.33f, 0.27f);
+            RenderSettings.ambientSkyColor = new Color(0.75f, 0.85f, 1f);
+            RenderSettings.ambientEquatorColor = new Color(0.78f, 0.80f, 0.82f);
+            RenderSettings.ambientGroundColor = new Color(0.62f, 0.55f, 0.52f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.72f, 0.84f, 0.95f);
-            RenderSettings.fogStartDistance = 90f;
-            RenderSettings.fogEndDistance = 260f;
+            RenderSettings.fogColor = new Color(0.84f, 0.91f, 0.98f);
+            RenderSettings.fogStartDistance = 45f;
+            RenderSettings.fogEndDistance = 190f;
         }
 
-        static void BuildScenery(Transform parent, Mats m, System.Random random)
+        static void BuildEnvironment(Track tr, Transform parent, Mats m, System.Random random)
         {
-            var scenery = new GameObject("Scenery").transform;
-            scenery.SetParent(parent, false);
+            var env = new GameObject("Environment").transform;
+            env.SetParent(parent, false);
+            Material[] corals = { m.coral, m.coral2, m.coral3 };
 
-            for (int i = 0; i < 16; i++)
+            // Cliff pillars beside the slide. Kept clear of the edges so a falling raft never lands on one.
+            for (int k = 0; k < tr.Count; k += 20)
             {
-                float side = i % 2 == 0 ? -1f : 1f;
-                float radius = 25f + R(random) * 18f;
-                Vector3 pos = new Vector3(5f + side * (85f + R(random) * 35f), -4f, -30f + i * 24f + R(random) * 10f);
-                var hill = Prim(PrimitiveType.Sphere, "Mountain", scenery, pos,
-                    new Vector3(radius * 2f, 22f + R(random) * 30f, radius * 2f), R(random) < 0.5f ? m.mountain : m.mountain2, false);
-                NoShadows(hill);
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    if (R(random) > 0.75f) continue;
+                    float radius = 3f + R(random) * 5f;
+                    float offset = tr.width[k] * 0.5f + 4f + radius + R(random) * 18f;
+                    Vector3 p = tr.Point(k, offset * s);
+                    Pillar(env, m, p, tr.pos[k].y - 1.5f - R(random) * 7f, radius, corals[random.Next(corals.Length)], true, random);
+                }
             }
 
-            for (int i = 0; i < 12; i++)
+            // Supports under the slide.
+            for (int k = 15; k < tr.Count; k += 40)
             {
+                Pillar(env, m, tr.pos[k], tr.pos[k].y - 1.3f, 2.2f + R(random), corals[random.Next(corals.Length)], false, random);
+            }
+
+            // Far mesas.
+            for (int i = 0; i < 26; i++)
+            {
+                int k = random.Next(tr.Count);
+                float side = R(random) < 0.5f ? -1f : 1f;
+                Vector3 p = tr.Point(k, side * (55f + R(random) * 70f));
+                var mesa = Pillar(env, m, p, tr.pos[k].y - 6f + R(random) * 20f, 9f + R(random) * 16f, corals[random.Next(corals.Length)], true, random);
+                NoShadows(mesa);
+            }
+
+            // Sea of clouds below and a few clouds in the sky.
+            for (int i = 0; i < 45; i++)
+            {
+                int k = random.Next(tr.Count);
+                Vector3 p = tr.Point(k, (R(random) - 0.5f) * 180f);
+                p.y = R(random) * 6f - 2f;
+                var cloud = Prim(PrimitiveType.Sphere, "CloudSea", env, p,
+                    new Vector3(22f + R(random) * 18f, 5f + R(random) * 4f, 18f + R(random) * 14f), m.cloud, false);
+                NoShadows(cloud);
+            }
+            for (int i = 0; i < 10; i++)
+            {
+                int k = random.Next(tr.Count);
+                Vector3 p = tr.Point(k, (R(random) - 0.5f) * 140f);
+                p.y = 55f + R(random) * 15f;
                 var cloud = new GameObject("Cloud").transform;
-                cloud.SetParent(scenery, false);
-                cloud.position = new Vector3(-70f + R(random) * 150f, 45f + R(random) * 15f, -20f + i * 30f);
+                cloud.SetParent(env, false);
+                cloud.position = p;
                 int puffs = 3 + random.Next(3);
                 for (int j = 0; j < puffs; j++)
                 {
-                    var puff = Prim(PrimitiveType.Sphere, "Puff", cloud,
-                        new Vector3((j - puffs * 0.5f) * 5f, R(random) * 2f, R(random) * 4f),
+                    Prim(PrimitiveType.Sphere, "Puff", cloud, new Vector3((j - puffs * 0.5f) * 5f, R(random) * 2f, R(random) * 4f),
                         new Vector3(9f + R(random) * 8f, 4f + R(random) * 3f, 7f + R(random) * 5f), m.cloud, false);
-                    NoShadows(puff);
                 }
+                NoShadows(cloud.gameObject);
             }
         }
 
-        static float R(System.Random random)
+        static GameObject Pillar(Transform parent, Mats m, Vector3 center, float topY, float radius, Material coral, bool decorate, System.Random random)
         {
-            return (float)random.NextDouble();
-        }
+            const float depth = 80f;
+            var pillar = new GameObject("Pillar").transform;
+            pillar.SetParent(parent, false);
+            pillar.position = new Vector3(center.x, topY, center.z);
+            pillar.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
 
-        static void NoShadows(GameObject go)
-        {
-            foreach (var r in go.GetComponentsInChildren<Renderer>())
+            MeshObject(PillarMesh(), "Cliff", pillar, new Vector3(0f, -depth, 0f), new Vector3(radius * 2f, depth, radius * 2f), coral);
+            MeshObject(PillarMesh(), "Ledge", pillar, new Vector3(0f, -3.5f, 0f), new Vector3(radius * 2.08f, 0.9f, radius * 2.08f), m.coral2);
+            MeshObject(PillarMesh(), "Grass", pillar, new Vector3(0f, -0.3f, 0f), new Vector3(radius * 2.1f, 0.6f, radius * 2.1f),
+                theme.grassMaterial != null ? theme.grassMaterial : m.grass);
+
+            if (decorate)
             {
-                r.shadowCastingMode = ShadowCastingMode.Off;
-            }
-        }
-
-        static Transform BuildCourse(Mats m, out int checkpointCount)
-        {
-            var course = new GameObject("Course").transform;
-
-            // River center line and width at each point.
-            Vector3[] p =
-            {
-                new Vector3(0f, 0f, -10f),
-                new Vector3(0f, 0f, 40f),
-                new Vector3(24f, 0f, 70f),
-                new Vector3(24f, 0f, 110f),
-                new Vector3(-14f, 0f, 150f),
-                new Vector3(-14f, 0f, 190f),
-                new Vector3(8f, 0f, 225f),
-                new Vector3(8f, 0f, 275f),
-            };
-            float[] width = { 16f, 16f, 15f, 15f, 14f, 14f, 10f, 10f };
-            int n = p.Length;
-
-            var left = new Vector3[n];
-            var right = new Vector3[n];
-            var tangents = new Vector3[n];
-            for (int i = 0; i < n; i++)
-            {
-                Vector3 dPrev = i > 0 ? (p[i] - p[i - 1]).normalized : (p[1] - p[0]).normalized;
-                Vector3 dNext = i < n - 1 ? (p[i + 1] - p[i]).normalized : dPrev;
-                Vector3 tangent = (dPrev + dNext).normalized;
-                Vector3 normal = RightOf(tangent);
-                float miter = 1f / Mathf.Max(0.3f, Vector3.Dot(normal, RightOf(dNext)));
-                tangents[i] = tangent;
-                left[i] = p[i] - normal * (width[i] * 0.5f * miter);
-                right[i] = p[i] + normal * (width[i] * 0.5f * miter);
-            }
-
-            var water = new GameObject("Water", typeof(MeshFilter), typeof(MeshRenderer));
-            water.transform.SetParent(course, false);
-            water.transform.position = new Vector3(5f, 0f, 135f);
-            water.GetComponent<MeshRenderer>().sharedMaterial = theme.waterMaterial != null ? theme.waterMaterial : m.water;
-            water.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
-            water.AddComponent<WaterWaves>();
-
-            var banks = new GameObject("Banks").transform;
-            banks.SetParent(course, false);
-            var decor = new GameObject("Decor").transform;
-            decor.SetParent(course, false);
-            var random = new System.Random(42);
-
-            for (int i = 0; i < n - 1; i++)
-            {
-                Vector3 r = RightOf((p[i + 1] - p[i]).normalized);
-                BuildBank(banks, decor, m, left[i], left[i + 1], -r, random);
-                BuildBank(banks, decor, m, right[i], right[i + 1], r, random);
-            }
-            BuildBank(banks, decor, m, left[0] - tangents[0], right[0] - tangents[0], -tangents[0], random);
-            BuildBank(banks, decor, m, left[n - 1], right[n - 1], tangents[n - 1], random);
-
-            BuildScenery(course, m, random);
-
-            var obstacles = new GameObject("Obstacles").transform;
-            obstacles.SetParent(course, false);
-
-            // Section 1: floating barrels to bump around.
-            Barrel(obstacles, m, PointOn(p, 0, 0.45f, -3f));
-            Barrel(obstacles, m, PointOn(p, 0, 0.50f, 3f));
-            Barrel(obstacles, m, PointOn(p, 0, 0.75f, 0f));
-
-            // Section 2: spinning bar.
-            SpinnerObstacle(obstacles, m, PointOn(p, 2, 0.5f, 0f), 10f, 50f);
-
-            // Section 3: red spiky buoys (touch = back to checkpoint).
-            HazardBuoy(obstacles, m, PointOn(p, 3, 0.35f, 3f));
-            HazardBuoy(obstacles, m, PointOn(p, 3, 0.65f, -3f));
-
-            // Section 4: sliding blocks.
-            Vector3 r4 = RightOf((p[5] - p[4]).normalized);
-            MovingBlock(obstacles, m, PointOn(p, 4, 0.35f, 0f) - r4 * 3.5f, r4 * 7f, 0f);
-            MovingBlock(obstacles, m, PointOn(p, 4, 0.65f, 0f) - r4 * 3.5f, r4 * 7f, 0.5f);
-
-            // Section 5: barrel field.
-            Barrel(obstacles, m, PointOn(p, 5, 0.3f, -2f));
-            Barrel(obstacles, m, PointOn(p, 5, 0.5f, 3f));
-            Barrel(obstacles, m, PointOn(p, 5, 0.7f, -1f));
-
-            // Section 6: narrow slalom.
-            Post(obstacles, m, PointOn(p, 6, 0.25f, -2f));
-            Post(obstacles, m, PointOn(p, 6, 0.45f, 2f));
-            Post(obstacles, m, PointOn(p, 6, 0.65f, -2f));
-
-            int[] checkpointAt = { 2, 4, 6 };
-            for (int i = 0; i < checkpointAt.Length; i++)
-            {
-                int w = checkpointAt[i];
-                BuildCheckpoint(course, m, i, p[w], tangents[w], width[w]);
-            }
-            checkpointCount = checkpointAt.Length;
-
-            BuildFinish(course, m, PointOn(p, 6, 0.85f, 0f), tangents[n - 1], width[n - 1]);
-
-            var start = new GameObject("StartPoint").transform;
-            start.SetParent(course, false);
-            start.position = new Vector3(0f, 0.25f, -2f);
-            start.rotation = Quaternion.LookRotation(tangents[0]);
-            return start;
-        }
-
-        static Vector3 RightOf(Vector3 forward)
-        {
-            return new Vector3(forward.z, 0f, -forward.x).normalized;
-        }
-
-        static Vector3 PointOn(Vector3[] p, int segment, float t, float sideOffset)
-        {
-            Vector3 a = p[segment];
-            Vector3 b = p[segment + 1];
-            return Vector3.Lerp(a, b, t) + RightOf((b - a).normalized) * sideOffset;
-        }
-
-        const float LandTop = 0.55f;
-
-        // One river bank: invisible wall collider, boulders along the edge, a sand
-        // strip, grass land, and decoration (trees, bushes, flowers, reeds, lily pads).
-        static void BuildBank(Transform banks, Transform decor, Mats m, Vector3 a, Vector3 b, Vector3 outward, System.Random random)
-        {
-            Wall(banks, "Wall", a, b);
-
-            Vector3 dir = (b - a).normalized;
-            outward.y = 0f;
-            outward.Normalize();
-            float length = Vector3.Distance(a, b);
-            Vector3 mid = (a + b) * 0.5f;
-            Quaternion rotation = Quaternion.LookRotation(dir);
-
-            var sand = Prim(PrimitiveType.Cube, "Sand", banks, mid + outward * 1.8f + Vector3.up * -0.15f,
-                new Vector3(3.6f, 1f, length + 1f), m.sand, false);
-            sand.transform.rotation = rotation;
-            sand.isStatic = true;
-
-            const float landWidth = 20f;
-            var land = Prim(PrimitiveType.Cube, "Land", banks, mid + outward * (3.4f + landWidth * 0.5f) + Vector3.up * (LandTop - 0.5f),
-                new Vector3(landWidth, 1f, length + 1f), theme.grassMaterial != null ? theme.grassMaterial : m.grass, false);
-            land.transform.rotation = rotation;
-            land.isStatic = true;
-
-            EdgeRocks(decor, m, a, b, outward, random);
-
-            for (float d = 1f; d < length; d += 2.8f)
-            {
-                Vector3 along = a + dir * d;
-                float roll = R(random);
-                if (roll < 0.22f) Reeds(decor, m, along + outward * (2.4f + R(random) * 1.2f) + Vector3.up * 0.35f, random);
-                else if (roll < 0.36f) LilyPad(decor, m, along - outward * (1.6f + R(random) * 1.5f), random);
-
-                Vector3 pos = along + outward * (4.5f + R(random) * 16f) + Vector3.up * LandTop;
-                float kind = R(random);
-                if (kind < 0.30f)
+                int items = 1 + random.Next(3);
+                for (int i = 0; i < items; i++)
                 {
-                    if (!TrySpawn(theme.trees, decor, pos, random)) Tree(decor, m, pos, random);
-                }
-                else if (kind < 0.45f)
-                {
-                    if (!TrySpawn(theme.bushes, decor, pos, random)) Bush(decor, m, pos, random);
-                }
-                else if (kind < 0.60f)
-                {
-                    if (!TrySpawn(theme.flowers, decor, pos, random)) Flowers(decor, m, pos, random);
-                }
-                else if (kind < 0.66f)
-                {
-                    if (!TrySpawn(theme.rocks, decor, pos, random)) Rock(decor, m, pos, random);
+                    float a = R(random) * Mathf.PI * 2f;
+                    float r = R(random) * radius * 0.6f;
+                    Vector3 p = pillar.position + new Vector3(Mathf.Cos(a) * r, 0.3f, Mathf.Sin(a) * r);
+                    float kind = R(random);
+                    if (kind < 0.5f)
+                    {
+                        if (!TrySpawn(theme.trees, pillar, p, random)) Tree(pillar, m, p, random);
+                    }
+                    else if (kind < 0.65f)
+                    {
+                        if (!TrySpawn(theme.flowers, pillar, p, random)) Mushroom(pillar, m, p, random);
+                    }
+                    else if (kind < 0.85f)
+                    {
+                        if (!TrySpawn(theme.bushes, pillar, p, random)) Bush(pillar, m, p, random);
+                    }
+                    else if (!TrySpawn(theme.rocks, pillar, p, random))
+                    {
+                        var rock = MeshObject(RockMesh(random.Next(3)), "Rock", pillar, Vector3.zero, Vector3.one * (1.2f + R(random) * 1.5f), m.rock);
+                        rock.transform.position = p;
+                    }
                 }
             }
-        }
-
-        static void Wall(Transform parent, string name, Vector3 a, Vector3 b)
-        {
-            Vector3 d = b - a;
-            var go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            go.transform.position = (a + b) * 0.5f + Vector3.up * 0.3f;
-            go.transform.rotation = Quaternion.LookRotation(d.normalized);
-            go.AddComponent<BoxCollider>().size = new Vector3(2f, 1.6f, d.magnitude + 2f);
-            go.isStatic = true;
-        }
-
-        static void EdgeRocks(Transform parent, Mats m, Vector3 a, Vector3 b, Vector3 outward, System.Random random)
-        {
-            Vector3 dir = (b - a).normalized;
-            float length = Vector3.Distance(a, b);
-            Material[] rockMats = { m.rock, m.rock2, m.rock3 };
-            for (float d = 0f; d < length; d += 1.8f)
-            {
-                float s = 1.4f + R(random);
-                Vector3 pos = a + dir * d + outward * (0.2f + R(random) * 0.4f) + Vector3.up * 0.1f;
-                if (TrySpawn(theme.rocks, parent, pos, random)) continue;
-                var rock = Prim(PrimitiveType.Sphere, "EdgeRock", parent, pos,
-                    new Vector3(s * 1.2f, s * (0.55f + R(random) * 0.3f), s), rockMats[random.Next(rockMats.Length)], false);
-                rock.transform.rotation = Quaternion.Euler(R(random) * 10f, R(random) * 360f, R(random) * 10f);
-                rock.isStatic = true;
-            }
+            return pillar.gameObject;
         }
 
         static void Tree(Transform parent, Mats m, Vector3 pos, System.Random random)
         {
             var tree = new GameObject("Tree").transform;
-            tree.SetParent(parent, false);
+            tree.SetParent(parent, true);
             tree.position = pos;
             tree.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
-            tree.localScale = Vector3.one * (0.8f + R(random) * 0.8f);
+            tree.localScale = Vector3.one * (0.9f + R(random) * 0.8f);
 
-            if (R(random) < 0.45f)
+            if (R(random) < 0.35f)
             {
                 Prim(PrimitiveType.Cylinder, "Trunk", tree, new Vector3(0f, 0.6f, 0f), new Vector3(0.35f, 0.6f, 0.35f), m.trunk, false);
                 for (int i = 0; i < 3; i++)
                 {
                     float w = 2.8f - i * 0.65f;
-                    MeshPrim(ConeMesh(), "PineTier", tree, new Vector3(0f, 0.9f + i * 1.05f, 0f), new Vector3(w, 1.9f, w), m.pine);
+                    MeshObject(ConeMesh(), "PineTier", tree, new Vector3(0f, 0.9f + i * 1.05f, 0f), new Vector3(w, 1.9f, w), m.pine);
                 }
             }
             else
             {
                 Material leaves = R(random) < 0.5f ? m.leaves : m.leaves2;
-                Prim(PrimitiveType.Cylinder, "Trunk", tree, new Vector3(0f, 1.1f, 0f), new Vector3(0.4f, 1.1f, 0.4f), m.trunk, false);
-                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0f, 2.9f, 0f), Vector3.one * 2.6f, leaves, false);
-                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0.8f, 2.4f, 0.3f), Vector3.one * 1.8f, leaves, false);
-                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(-0.6f, 2.5f, -0.5f), Vector3.one * 1.9f, leaves, false);
+                Prim(PrimitiveType.Cylinder, "Trunk", tree, new Vector3(0f, 1.3f, 0f), new Vector3(0.35f, 1.3f, 0.35f), m.trunk, false);
+                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0f, 3.2f, 0f), new Vector3(2.8f, 1.6f, 2.8f), leaves, false);
+                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0.7f, 2.7f, 0.4f), new Vector3(1.9f, 1.1f, 1.9f), leaves, false);
+                Prim(PrimitiveType.Sphere, "Leaves", tree, new Vector3(-0.6f, 2.8f, -0.5f), new Vector3(2f, 1.2f, 2f), leaves, false);
+            }
+        }
+
+        static void Mushroom(Transform parent, Mats m, Vector3 pos, System.Random random)
+        {
+            var shroom = new GameObject("Mushroom").transform;
+            shroom.SetParent(parent, true);
+            shroom.position = pos;
+            shroom.localScale = Vector3.one * (0.8f + R(random) * 0.8f);
+            Prim(PrimitiveType.Cylinder, "Stem", shroom, new Vector3(0f, 0.6f, 0f), new Vector3(0.45f, 0.6f, 0.45f), m.mushroomStem, false);
+            Prim(PrimitiveType.Sphere, "Cap", shroom, new Vector3(0f, 1.3f, 0f), new Vector3(1.7f, 0.9f, 1.7f), m.mushroomCap, false);
+            for (int i = 0; i < 5; i++)
+            {
+                float a = i * 72f * Mathf.Deg2Rad;
+                Prim(PrimitiveType.Sphere, "Dot", shroom, new Vector3(Mathf.Cos(a) * 0.5f, 1.62f, Mathf.Sin(a) * 0.5f), Vector3.one * 0.25f, m.white, false);
             }
         }
 
         static void Bush(Transform parent, Mats m, Vector3 pos, System.Random random)
         {
             var bush = new GameObject("Bush").transform;
-            bush.SetParent(parent, false);
+            bush.SetParent(parent, true);
             bush.position = pos;
             int count = 2 + random.Next(3);
             for (int i = 0; i < count; i++)
@@ -689,56 +874,6 @@ namespace FartRaft.EditorTools
                 Prim(PrimitiveType.Sphere, "Leaf", bush, new Vector3((R(random) - 0.5f) * 1.4f, s * 0.35f, (R(random) - 0.5f) * 1.4f),
                     new Vector3(s, s * 0.8f, s), m.bush, false);
             }
-        }
-
-        static void Flowers(Transform parent, Mats m, Vector3 pos, System.Random random)
-        {
-            var patch = new GameObject("Flowers").transform;
-            patch.SetParent(parent, false);
-            patch.position = pos;
-            int count = 4 + random.Next(4);
-            for (int i = 0; i < count; i++)
-            {
-                Vector3 p = new Vector3((R(random) - 0.5f) * 1.6f, 0f, (R(random) - 0.5f) * 1.6f);
-                Prim(PrimitiveType.Cylinder, "Stem", patch, p + Vector3.up * 0.2f, new Vector3(0.05f, 0.2f, 0.05f), m.reed, false);
-                Prim(PrimitiveType.Sphere, "Head", patch, p + Vector3.up * 0.42f, Vector3.one * 0.22f,
-                    m.flowerHeads[random.Next(m.flowerHeads.Length)], false);
-            }
-            NoShadows(patch.gameObject);
-        }
-
-        static void Reeds(Transform parent, Mats m, Vector3 pos, System.Random random)
-        {
-            var reeds = new GameObject("Reeds").transform;
-            reeds.SetParent(parent, false);
-            reeds.position = pos;
-            int count = 4 + random.Next(4);
-            for (int i = 0; i < count; i++)
-            {
-                float h = 0.6f + R(random) * 0.5f;
-                var stalk = Prim(PrimitiveType.Cylinder, "Reed", reeds,
-                    new Vector3((R(random) - 0.5f) * 0.9f, h, (R(random) - 0.5f) * 0.9f), new Vector3(0.07f, h, 0.07f), m.reed, false);
-                stalk.transform.localRotation = Quaternion.Euler((R(random) - 0.5f) * 14f, 0f, (R(random) - 0.5f) * 14f);
-            }
-            NoShadows(reeds.gameObject);
-        }
-
-        static void LilyPad(Transform parent, Mats m, Vector3 pos, System.Random random)
-        {
-            float s = 1f + R(random) * 0.7f;
-            var pad = Prim(PrimitiveType.Cylinder, "LilyPad", parent, pos + Vector3.up * 0.06f, new Vector3(s, 0.02f, s), m.lily, false);
-            if (R(random) < 0.35f)
-            {
-                Prim(PrimitiveType.Sphere, "LilyFlower", pad.transform, new Vector3(0.15f, 6f, 0.1f), new Vector3(0.25f, 8f, 0.25f), m.flowerHeads[0], false);
-            }
-            NoShadows(pad);
-        }
-
-        static void Rock(Transform parent, Mats m, Vector3 pos, System.Random random)
-        {
-            float s = 0.8f + R(random) * 1.5f;
-            var rock = Prim(PrimitiveType.Sphere, "Rock", parent, pos + Vector3.up * 0.2f, new Vector3(s * 1.4f, s * 0.8f, s), m.rock2, false);
-            rock.transform.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
         }
 
         static bool TrySpawn(GameObject[] prefabs, Transform parent, Vector3 pos, System.Random random)
@@ -754,171 +889,7 @@ namespace FartRaft.EditorTools
             return true;
         }
 
-        static Mesh coneMesh;
-
-        // 8-sided low-poly cone, base radius 0.5 at y=0, tip at y=1. Saved as an asset so the scene keeps it.
-        static Mesh ConeMesh()
-        {
-            if (coneMesh != null) return coneMesh;
-            string path = MaterialsFolder + "/Cone.asset";
-            coneMesh = AssetDatabase.LoadAssetAtPath<Mesh>(path);
-            if (coneMesh != null) return coneMesh;
-
-            const int sides = 8;
-            var vertices = new List<Vector3>();
-            var triangles = new List<int>();
-            Vector3 tip = Vector3.up;
-            for (int i = 0; i < sides; i++)
-            {
-                float a0 = i * Mathf.PI * 2f / sides;
-                float a1 = (i + 1) * Mathf.PI * 2f / sides;
-                Vector3 p0 = new Vector3(Mathf.Cos(a0) * 0.5f, 0f, Mathf.Sin(a0) * 0.5f);
-                Vector3 p1 = new Vector3(Mathf.Cos(a1) * 0.5f, 0f, Mathf.Sin(a1) * 0.5f);
-                Vector3 sideCenter = (p0 + p1 + tip) / 3f;
-                AddTriangle(vertices, triangles, tip, p0, p1, new Vector3(sideCenter.x, 0f, sideCenter.z));
-                AddTriangle(vertices, triangles, Vector3.zero, p0, p1, Vector3.down);
-            }
-
-            coneMesh = new Mesh { name = "Cone" };
-            coneMesh.SetVertices(vertices);
-            coneMesh.SetTriangles(triangles, 0);
-            coneMesh.RecalculateNormals();
-            coneMesh.RecalculateBounds();
-            AssetDatabase.CreateAsset(coneMesh, path);
-            return coneMesh;
-        }
-
-        static void AddTriangle(List<Vector3> vertices, List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Vector3 outward)
-        {
-            // Unity treats Cross(b - a, c - a) as the front-face normal.
-            if (Vector3.Dot(Vector3.Cross(b - a, c - a), outward) < 0f)
-            {
-                Vector3 t = b;
-                b = c;
-                c = t;
-            }
-            int start = vertices.Count;
-            vertices.Add(a);
-            vertices.Add(b);
-            vertices.Add(c);
-            triangles.Add(start);
-            triangles.Add(start + 1);
-            triangles.Add(start + 2);
-        }
-
-        static GameObject MeshPrim(Mesh mesh, string name, Transform parent, Vector3 pos, Vector3 scale, Material mat)
-        {
-            var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = pos;
-            go.transform.localScale = scale;
-            go.GetComponent<MeshFilter>().sharedMesh = mesh;
-            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
-            return go;
-        }
-
-        static void Barrel(Transform parent, Mats m, Vector3 pos)
-        {
-            var go = Prim(PrimitiveType.Cylinder, "Barrel", parent, pos + Vector3.up * 0.25f, new Vector3(1.4f, 0.5f, 1.4f), m.barrel, true);
-            var body = go.AddComponent<Rigidbody>();
-            body.mass = 6f;
-            body.useGravity = false;
-            body.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
-            PhysicsCompat.SetDamping(body, 1.2f, 1.2f);
-        }
-
-        static void SpinnerObstacle(Transform parent, Mats m, Vector3 pos, float length, float speed)
-        {
-            Prim(PrimitiveType.Cylinder, "SpinnerPillar", parent, pos + Vector3.up * 0.5f, new Vector3(1.2f, 1f, 1.2f), m.metal, true);
-            var pivot = new GameObject("Spinner");
-            pivot.transform.SetParent(parent, false);
-            pivot.transform.position = pos;
-            pivot.AddComponent<Rigidbody>().isKinematic = true;
-            pivot.AddComponent<Spinner>().degreesPerSecond = speed;
-            Prim(PrimitiveType.Cube, "Bar", pivot.transform, new Vector3(0f, 0.4f, 0f), new Vector3(length, 0.8f, 0.7f), m.danger, true);
-        }
-
-        static void HazardBuoy(Transform parent, Mats m, Vector3 pos)
-        {
-            var go = Prim(PrimitiveType.Sphere, "HazardBuoy", parent, pos + Vector3.up * 0.3f, Vector3.one * 2.2f, m.danger, true);
-            go.GetComponent<Collider>().isTrigger = true;
-            go.AddComponent<Hazard>();
-            for (int i = 0; i < 6; i++)
-            {
-                var spike = Prim(PrimitiveType.Cube, "Spike", go.transform, Vector3.zero, new Vector3(0.12f, 0.12f, 1.4f), m.metal, false);
-                spike.transform.localRotation = Quaternion.Euler(i % 2 == 0 ? 0f : 90f, i * 60f, 0f);
-            }
-            Prim(PrimitiveType.Cylinder, "Ring", parent, pos + Vector3.up * 0.02f, new Vector3(3.2f, 0.02f, 3.2f), m.white, false);
-        }
-
-        static void MovingBlock(Transform parent, Mats m, Vector3 start, Vector3 offset, float phase)
-        {
-            var go = Prim(PrimitiveType.Cube, "MovingBlock", parent, start + Vector3.up * 0.4f, new Vector3(4.5f, 1.2f, 1.6f), m.darkWood, true);
-            go.transform.rotation = Quaternion.LookRotation(Vector3.Cross(offset.normalized, Vector3.up));
-            go.AddComponent<Rigidbody>().isKinematic = true;
-            var mover = go.AddComponent<Mover>();
-            mover.offset = offset;
-            mover.period = 3f;
-            mover.phase = phase;
-        }
-
-        static void Post(Transform parent, Mats m, Vector3 pos)
-        {
-            var go = Prim(PrimitiveType.Cylinder, "Post", parent, pos + Vector3.up * 0.8f, new Vector3(2.4f, 1.2f, 2.4f), m.darkWood, true);
-            go.isStatic = true;
-            Prim(PrimitiveType.Cylinder, "Stripe", go.transform, new Vector3(0f, 0.6f, 0f), new Vector3(1.05f, 0.15f, 1.05f), m.danger, false);
-        }
-
-        static void BuildCheckpoint(Transform parent, Mats m, int index, Vector3 pos, Vector3 tangent, float width)
-        {
-            var go = new GameObject("Checkpoint" + (index + 1));
-            go.transform.SetParent(parent, false);
-            go.transform.position = pos + Vector3.up * 0.25f;
-            go.transform.rotation = Quaternion.LookRotation(tangent);
-            var trigger = go.AddComponent<BoxCollider>();
-            trigger.isTrigger = true;
-            trigger.size = new Vector3(width, 4f, 2f);
-            go.AddComponent<Checkpoint>().index = index;
-
-            float half = width * 0.5f - 1.2f;
-            for (int s = -1; s <= 1; s += 2)
-            {
-                Prim(PrimitiveType.Cylinder, "Pole", go.transform, new Vector3(half * s, 1.75f, 0f), new Vector3(0.2f, 2f, 0.2f), m.white, false);
-                Prim(PrimitiveType.Cube, "Flag", go.transform, new Vector3(half * s - 0.6f * s, 3.3f, 0f), new Vector3(1.2f, 0.7f, 0.05f), m.yellow, false);
-            }
-        }
-
-        static void BuildFinish(Transform parent, Mats m, Vector3 pos, Vector3 tangent, float width)
-        {
-            var go = new GameObject("FinishLine");
-            go.transform.SetParent(parent, false);
-            go.transform.position = pos + Vector3.up * 0.25f;
-            go.transform.rotation = Quaternion.LookRotation(tangent);
-            var trigger = go.AddComponent<BoxCollider>();
-            trigger.isTrigger = true;
-            trigger.size = new Vector3(width, 4f, 2f);
-            go.AddComponent<FinishLine>();
-
-            float half = width * 0.5f - 0.8f;
-            for (int s = -1; s <= 1; s += 2)
-            {
-                Prim(PrimitiveType.Cylinder, "Pole", go.transform, new Vector3(half * s, 2.5f, 0f), new Vector3(0.35f, 2.8f, 0.35f), m.white, false);
-            }
-
-            int tiles = 12;
-            float tile = half * 2f / tiles;
-            for (int i = 0; i < tiles; i++)
-            {
-                for (int row = 0; row < 2; row++)
-                {
-                    float x = -half + tile * (i + 0.5f);
-                    Prim(PrimitiveType.Cube, "Checker", go.transform, new Vector3(x, 5f + row * tile, 0f),
-                        new Vector3(tile, tile, 0.2f), (i + row) % 2 == 0 ? m.white : m.black, false);
-                }
-            }
-        }
-
-        // ---------------------------------------------------------------- Raft
+        // ================================================================ Raft and characters
 
         static Raft BuildRaft(Mats m, Transform start, out FartSeat[] seats)
         {
@@ -926,53 +897,59 @@ namespace FartRaft.EditorTools
             raftGo.transform.SetPositionAndRotation(start.position, start.rotation);
             var body = raftGo.AddComponent<Rigidbody>();
             body.mass = 40f;
-            var box = raftGo.AddComponent<BoxCollider>();
-            box.size = new Vector3(4f, 0.6f, 4f);
+            var collider = raftGo.AddComponent<MeshCollider>();
+            collider.sharedMesh = CylinderMesh("RaftCollider", 2.55f, 0.9f, 16, true);
+            collider.convex = true;
+            SetSlippery(collider);
             var raft = raftGo.AddComponent<Raft>();
 
             var visual = new GameObject("Visual").transform;
             visual.SetParent(raftGo.transform, false);
             raft.visual = visual;
 
-            for (int i = 0; i < 5; i++)
+            var ring = TorusMesh("RaftRing", 2.1f, 0.45f, 28, 10);
+            MeshObject(ring, "Tube", visual, Vector3.zero, Vector3.one, m.raftTube);
+            MeshObject(ring, "TubeBottom", visual, new Vector3(0f, -0.2f, 0f), new Vector3(1.01f, 0.6f, 1.01f), m.raftBand);
+            MeshObject(CylinderMesh("RaftFloor", 1.8f, 0.14f, 20, false), "Floor", visual, new Vector3(0f, 0.02f, 0f), Vector3.one, m.raftFloor);
+            for (float x = -1.35f; x <= 1.36f; x += 0.45f)
             {
-                var log = Prim(PrimitiveType.Cylinder, "Log", visual, new Vector3(-1.6f + i * 0.8f, 0f, 0f), new Vector3(0.8f, 2f, 0.8f), i % 2 == 0 ? m.wood : m.darkWood, false);
-                log.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                float chord = 2f * Mathf.Sqrt(Mathf.Max(0f, 1.75f * 1.75f - x * x));
+                Prim(PrimitiveType.Cube, "PlankLine", visual, new Vector3(x, 0.1f, 0f), new Vector3(0.04f, 0.02f, chord), m.darkWood, false);
             }
-            Prim(PrimitiveType.Cube, "Plank", visual, new Vector3(0f, 0.38f, 1.4f), new Vector3(4.2f, 0.12f, 0.45f), m.darkWood, false);
-            Prim(PrimitiveType.Cube, "Plank", visual, new Vector3(0f, 0.38f, -1.4f), new Vector3(4.2f, 0.12f, 0.45f), m.darkWood, false);
-
-            seats = new FartSeat[4];
-            Vector2[] corners = { new Vector2(-1.3f, -1.3f), new Vector2(1.3f, -1.3f), new Vector2(-1.3f, 1.3f), new Vector2(1.3f, 1.3f) };
             for (int i = 0; i < 4; i++)
             {
-                seats[i] = BuildSeat(m, visual, raft, i, new Vector3(corners[i].x, 0.42f, corners[i].y));
+                float a = (45f + i * 90f) * Mathf.Deg2Rad;
+                var strap = Prim(PrimitiveType.Cube, "Strap", visual, new Vector3(Mathf.Sin(a) * 2.1f, 0f, Mathf.Cos(a) * 2.1f),
+                    new Vector3(0.28f, 0.98f, 1.0f), m.strap, false);
+                strap.transform.localRotation = Quaternion.Euler(0f, (45f + i * 90f), 0f);
+                var handle = MeshObject(TorusMesh("Handle", 0.22f, 0.05f, 12, 6), "Handle", visual,
+                    new Vector3(Mathf.Sin(a) * 2.62f, 0.05f, Mathf.Cos(a) * 2.62f), Vector3.one, m.strap);
+                handle.transform.localRotation = Quaternion.Euler(0f, (45f + i * 90f), 90f);
+            }
+
+            seats = new FartSeat[4];
+            float[] defaultAngles = { 225f, 135f, 315f, 45f };
+            for (int i = 0; i < 4; i++)
+            {
+                seats[i] = BuildSeat(m, visual, raft, i);
+                seats[i].SetAngle(defaultAngles[i]);
             }
             return raft;
         }
 
-        static FartSeat BuildSeat(Mats m, Transform visual, Raft raft, int index, Vector3 localPos)
+        static FartSeat BuildSeat(Mats m, Transform visual, Raft raft, int index)
         {
-            var seatGo = new GameObject("Seat_P" + (index + 1));
+            var seatGo = new GameObject("Player" + (index + 1) + "_" + AnimalNames[index]);
             seatGo.transform.SetParent(visual, false);
-            seatGo.transform.localPosition = localPos;
 
             var character = new GameObject("Character").transform;
             character.SetParent(seatGo.transform, false);
-            Material body = m.players[index];
-            Prim(PrimitiveType.Capsule, "Body", character, new Vector3(0f, 0.6f, 0f), new Vector3(0.8f, 0.6f, 0.8f), body, false);
-            Prim(PrimitiveType.Sphere, "CheekL", character, new Vector3(-0.17f, 0.35f, -0.3f), Vector3.one * 0.38f, body, false);
-            Prim(PrimitiveType.Sphere, "CheekR", character, new Vector3(0.17f, 0.35f, -0.3f), Vector3.one * 0.38f, body, false);
-            for (int s = -1; s <= 1; s += 2)
-            {
-                Prim(PrimitiveType.Sphere, "Eye", character, new Vector3(0.16f * s, 0.95f, 0.33f), Vector3.one * 0.22f, m.white, false);
-                Prim(PrimitiveType.Sphere, "Pupil", character, new Vector3(0.16f * s, 0.95f, 0.43f), Vector3.one * 0.1f, m.black, false);
-            }
+            BuildAnimal(character, m, index, out Transform leftArm, out Transform rightArm);
 
             var puffGo = new GameObject("FartParticles");
             puffGo.transform.SetParent(character, false);
-            puffGo.transform.localPosition = new Vector3(0f, 0.35f, -0.5f);
-            puffGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            puffGo.transform.localPosition = new Vector3(0f, 0.4f, -0.45f);
+            puffGo.transform.localRotation = Quaternion.Euler(-10f, 180f, 0f);
             var particles = BuildFartParticles(puffGo, m.puff);
 
             var audio = seatGo.AddComponent<AudioSource>();
@@ -983,9 +960,82 @@ namespace FartRaft.EditorTools
             seat.playerIndex = index;
             seat.raft = raft;
             seat.character = character;
+            seat.leftArm = leftArm;
+            seat.rightArm = rightArm;
             seat.fartParticles = particles;
             seat.fartAudio = audio;
             return seat;
+        }
+
+        // Chunky pill-shaped animals with googly eyes. They face +Z (the raft center).
+        static void BuildAnimal(Transform root, Mats m, int index, out Transform leftArm, out Transform rightArm)
+        {
+            Material main = m.animalMain[index];
+            Material light = m.animalLight[index];
+            bool gorilla = index == 3;
+
+            Prim(PrimitiveType.Capsule, "Body", root, new Vector3(0f, 0.68f, 0f), gorilla ? new Vector3(0.95f, 0.62f, 0.82f) : new Vector3(0.85f, 0.62f, 0.78f), main, false);
+            Prim(PrimitiveType.Sphere, "Belly", root, new Vector3(0f, 0.62f, 0.26f), new Vector3(0.6f, 0.72f, 0.3f), light, false);
+            Prim(PrimitiveType.Sphere, "ButtL", root, new Vector3(-0.17f, 0.42f, -0.3f), Vector3.one * 0.42f, main, false);
+            Prim(PrimitiveType.Sphere, "ButtR", root, new Vector3(0.17f, 0.42f, -0.3f), Vector3.one * 0.42f, main, false);
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Prim(PrimitiveType.Cylinder, "Leg", root, new Vector3(0.2f * s, 0.08f, 0.02f), new Vector3(0.24f, 0.1f, 0.24f), main, false);
+            }
+
+            leftArm = ArmPivot(root, main, -1f, gorilla);
+            rightArm = ArmPivot(root, main, 1f, gorilla);
+
+            switch (index)
+            {
+                case 0: // capybara
+                    Prim(PrimitiveType.Sphere, "Snout", root, new Vector3(0f, 0.98f, 0.36f), new Vector3(0.46f, 0.32f, 0.36f), light, false);
+                    Prim(PrimitiveType.Sphere, "Nose", root, new Vector3(0f, 1.04f, 0.53f), new Vector3(0.16f, 0.09f, 0.08f), m.black, false);
+                    Prim(PrimitiveType.Sphere, "EarL", root, new Vector3(-0.24f, 1.3f, 0.02f), Vector3.one * 0.15f, light, false);
+                    Prim(PrimitiveType.Sphere, "EarR", root, new Vector3(0.24f, 1.3f, 0.02f), Vector3.one * 0.15f, light, false);
+                    break;
+                case 1: // hippo
+                    Prim(PrimitiveType.Sphere, "Snout", root, new Vector3(0f, 0.92f, 0.36f), new Vector3(0.66f, 0.4f, 0.44f), light, false);
+                    Prim(PrimitiveType.Sphere, "NostrilL", root, new Vector3(-0.12f, 1.05f, 0.56f), Vector3.one * 0.07f, m.black, false);
+                    Prim(PrimitiveType.Sphere, "NostrilR", root, new Vector3(0.12f, 1.05f, 0.56f), Vector3.one * 0.07f, m.black, false);
+                    Prim(PrimitiveType.Sphere, "EarL", root, new Vector3(-0.27f, 1.32f, 0f), Vector3.one * 0.12f, main, false);
+                    Prim(PrimitiveType.Sphere, "EarR", root, new Vector3(0.27f, 1.32f, 0f), Vector3.one * 0.12f, main, false);
+                    break;
+                case 2: // crocodile
+                    Prim(PrimitiveType.Sphere, "Snout", root, new Vector3(0f, 0.98f, 0.5f), new Vector3(0.4f, 0.24f, 0.78f), light, false);
+                    Prim(PrimitiveType.Sphere, "NostrilL", root, new Vector3(-0.08f, 1.08f, 0.85f), Vector3.one * 0.06f, m.black, false);
+                    Prim(PrimitiveType.Sphere, "NostrilR", root, new Vector3(0.08f, 1.08f, 0.85f), Vector3.one * 0.06f, m.black, false);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        var bump = MeshObject(ConeMesh(), "Bump", root, new Vector3(0f, 1.15f - i * 0.28f, -0.36f), new Vector3(0.18f, 0.2f, 0.18f), light);
+                        bump.transform.localRotation = Quaternion.Euler(-60f, 0f, 0f);
+                    }
+                    break;
+                default: // gorilla
+                    Prim(PrimitiveType.Sphere, "Face", root, new Vector3(0f, 0.98f, 0.32f), new Vector3(0.52f, 0.46f, 0.26f), light, false);
+                    Prim(PrimitiveType.Cube, "Brow", root, new Vector3(0f, 1.24f, 0.36f), new Vector3(0.52f, 0.1f, 0.14f), main, false);
+                    Prim(PrimitiveType.Sphere, "Nose", root, new Vector3(0f, 1.0f, 0.46f), new Vector3(0.16f, 0.08f, 0.06f), m.black, false);
+                    break;
+            }
+
+            float eyeY = index == 1 ? 1.2f : 1.16f;
+            float eyeZ = index == 2 ? 0.26f : 0.3f;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Prim(PrimitiveType.Sphere, "Eye", root, new Vector3(0.16f * s, eyeY, eyeZ), Vector3.one * 0.32f, m.eyeWhite, false);
+                Prim(PrimitiveType.Sphere, "Pupil", root, new Vector3(0.16f * s + 0.03f * s * (index % 2 == 0 ? 1f : -1f), eyeY + 0.02f * s, eyeZ + 0.15f),
+                    Vector3.one * 0.12f, m.black, false);
+            }
+        }
+
+        static Transform ArmPivot(Transform root, Material mat, float side, bool gorilla)
+        {
+            var pivot = new GameObject(side < 0f ? "ArmL" : "ArmR").transform;
+            pivot.SetParent(root, false);
+            pivot.localPosition = new Vector3((gorilla ? 0.5f : 0.44f) * side, 0.88f, 0.05f);
+            Prim(PrimitiveType.Capsule, "Arm", pivot, new Vector3(0.04f * side, -0.26f, 0.06f),
+                gorilla ? new Vector3(0.24f, 0.32f, 0.24f) : new Vector3(0.18f, 0.27f, 0.18f), mat, false);
+            return pivot;
         }
 
         static ParticleSystem BuildFartParticles(GameObject go, Material material)
@@ -996,55 +1046,94 @@ namespace FartRaft.EditorTools
             var main = ps.main;
             main.loop = true;
             main.playOnAwake = true;
-            main.startLifetime = 0.9f;
-            main.startSpeed = new ParticleSystem.MinMaxCurve(3f, 5f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.4f, 0.9f);
-            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.55f, 0.75f, 0.25f, 0.85f), new Color(0.80f, 0.85f, 0.45f, 0.65f));
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.1f, 1.6f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 3.5f);
+            main.startSize = new ParticleSystem.MinMaxCurve(1.0f, 1.8f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.62f, 0.95f, 0.1f, 0.95f), new Color(0.8f, 1f, 0.3f, 0.8f));
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.gravityModifier = -0.05f;
-            main.maxParticles = 150;
+            main.gravityModifier = -0.02f;
+            main.maxParticles = 120;
 
             var emission = ps.emission;
-            emission.rateOverTime = 35f;
+            emission.rateOverTime = 16f;
             emission.enabled = false;
 
             var shape = ps.shape;
             shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 20f;
-            shape.radius = 0.1f;
+            shape.angle = 25f;
+            shape.radius = 0.15f;
+
+            var velocity = ps.limitVelocityOverLifetime;
+            velocity.enabled = true;
+            velocity.limit = 1.2f;
+            velocity.dampen = 0.15f;
 
             var size = ps.sizeOverLifetime;
             size.enabled = true;
-            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0.6f, 1f, 2f));
+            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.5f, 1f, 1.7f));
 
             var color = ps.colorOverLifetime;
             color.enabled = true;
             var gradient = new Gradient();
             gradient.SetKeys(
-                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0f, 1f) });
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(0.85f, 1f, 0.7f), 1f) },
+                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0.85f, 0.6f), new GradientAlphaKey(0f, 1f) });
             color.color = gradient;
 
             go.GetComponent<ParticleSystemRenderer>().sharedMaterial = material;
             return ps;
         }
 
-        static CameraFollow BuildCamera(Transform target)
+        static ParticleSystem BuildImpactEffect(Mats m)
+        {
+            var go = new GameObject("ImpactEffect");
+            var ps = go.AddComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            var main = ps.main;
+            main.loop = true;
+            main.playOnAwake = true;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.3f, 0.5f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(4f, 8f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.5f, 1.1f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.95f, 0.3f), new Color(1f, 0.6f, 0.15f));
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 80;
+
+            var emission = ps.emission;
+            emission.rateOverTime = 0f;
+
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = 0.3f;
+
+            var size = ps.sizeOverLifetime;
+            size.enabled = true;
+            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 1f, 1f, 0f));
+
+            go.GetComponent<ParticleSystemRenderer>().sharedMaterial = m.star;
+            return ps;
+        }
+
+        static CameraFollow BuildCamera(Transform target, Vector3[] path)
         {
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
             var cam = camGo.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.Skybox;
-            cam.fieldOfView = 55f;
-            cam.farClipPlane = 260f;
+            cam.fieldOfView = 58f;
+            cam.farClipPlane = 300f;
             camGo.AddComponent<AudioListener>();
             var follow = camGo.AddComponent<CameraFollow>();
             follow.target = target;
+            follow.path = path;
             follow.Snap();
             return follow;
         }
 
-        // ---------------------------------------------------------------- UI
+        // ================================================================ UI
 
         static void LoadUIResources()
         {
@@ -1077,35 +1166,76 @@ namespace FartRaft.EditorTools
 
             Transform root = canvasGo.transform;
             Vector2 center = new Vector2(0.5f, 0.5f);
+            Vector2 top = new Vector2(0.5f, 1f);
 
             // HUD
             var hud = UIObject("HUD", root);
             Stretch(hud);
             manager.hudPanel = hud.gameObject;
-            manager.timerText = Label(hud, "Timer", "0:00.00", 64, new Vector2(0.5f, 1f), new Vector2(0f, -60f), new Vector2(400f, 90f));
-            manager.syncText = Label(hud, "SyncBoost", "SYNC BOOST!", 56, new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(700f, 80f));
-            manager.syncText.color = new Color(0.7f, 1f, 0.3f);
-            manager.messageText = Label(hud, "Message", "", 110, center, new Vector2(0f, 120f), new Vector2(1400f, 160f));
-            Label(hud, "Hint", "Hold your button to fart.  Slide left/right while holding to aim.  Fart together for a SYNC BOOST!",
-                30, new Vector2(0.5f, 0f), new Vector2(0f, 50f), new Vector2(1100f, 60f));
-            manager.hudMenuButton = MakeButton(hud, "MenuButton", "MENU", new Vector2(0.5f, 1f), new Vector2(330f, -60f), new Vector2(180f, 80f), new Color(0f, 0f, 0f, 0.45f), 34);
+
+            for (int i = 0; i < seats.Length; i++)
+            {
+                var tag = Label(hud, "NameTag_P" + (i + 1), AnimalNames[i], 30, center, Vector2.zero, new Vector2(240f, 50f));
+                tag.color = Color.Lerp(PlayerColors[i], Color.white, 0.35f);
+                tag.gameObject.AddComponent<WorldLabel>().target = seats[i].transform;
+            }
+
+            var barBack = UIObject("ProgressBar", hud);
+            Place(barBack, top, new Vector2(0f, -22f), new Vector2(1500f, 22f));
+            var barImage = barBack.gameObject.AddComponent<Image>();
+            barImage.sprite = roundedSprite;
+            barImage.type = Image.Type.Sliced;
+            barImage.color = new Color(1f, 1f, 1f, 0.85f);
+            var fillRt = UIObject("Fill", barBack);
+            Stretch(fillRt);
+            fillRt.offsetMin = new Vector2(3f, 3f);
+            fillRt.offsetMax = new Vector2(-3f, -3f);
+            var fill = fillRt.gameObject.AddComponent<Image>();
+            fill.sprite = roundedSprite;
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+            fill.color = new Color(0.45f, 0.85f, 0.25f);
+            manager.progressFill = fill;
+
+            var timerBack = UIObject("TimerBack", hud);
+            Place(timerBack, top, new Vector2(0f, -78f), new Vector2(300f, 70f));
+            var timerImage = timerBack.gameObject.AddComponent<Image>();
+            timerImage.sprite = roundedSprite;
+            timerImage.type = Image.Type.Sliced;
+            timerImage.color = new Color(0.25f, 0.3f, 0.38f, 0.75f);
+            manager.timerText = Label(timerBack, "Timer", "0:00.00", 48, center, Vector2.zero, new Vector2(300f, 70f));
+
+            var fallsBack = UIObject("FallsBack", hud);
+            Place(fallsBack, new Vector2(1f, 1f), new Vector2(-150f, -78f), new Vector2(220f, 64f));
+            var fallsImage = fallsBack.gameObject.AddComponent<Image>();
+            fallsImage.sprite = roundedSprite;
+            fallsImage.type = Image.Type.Sliced;
+            fallsImage.color = new Color(0.25f, 0.3f, 0.38f, 0.75f);
+            manager.fallsText = Label(fallsBack, "Falls", "FALLS 0", 36, center, Vector2.zero, new Vector2(220f, 64f));
+
+            manager.hudMenuButton = MakeButton(hud, "MenuButton", "MENU", top, new Vector2(280f, -78f), new Vector2(170f, 64f), new Color(0.25f, 0.3f, 0.38f, 0.75f), 32);
+            manager.syncText = Label(hud, "SyncBoost", "SYNC BOOST!", 60, top, new Vector2(0f, -160f), new Vector2(800f, 90f));
+            manager.syncText.color = new Color(0.7f, 1f, 0.2f);
+            manager.messageText = Label(hud, "Message", "", 110, center, new Vector2(0f, 140f), new Vector2(1400f, 160f));
+            Label(hud, "Hint", "Hold to fart (pushes the raft away from you).  Slide left/right while holding to walk around the raft.",
+                28, new Vector2(0.5f, 0f), new Vector2(0f, 45f), new Vector2(1100f, 60f));
 
             Vector2[] anchors = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };
             var buttons = new TouchFartButton[4];
             for (int i = 0; i < 4; i++)
             {
                 Vector2 a = anchors[i];
-                Vector2 pos = new Vector2(a.x < 0.5f ? 230f : -230f, a.y < 0.5f ? 230f : -230f);
+                Vector2 pos = new Vector2(a.x < 0.5f ? 230f : -230f, a.y < 0.5f ? 230f : -300f);
                 buttons[i] = FartButton(hud, i, a, pos, seats[i]);
             }
             manager.buttons = buttons;
 
             // Menu
-            var menu = Panel(root, "Menu", new Color(0.05f, 0.1f, 0.2f, 0.85f));
+            var menu = Panel(root, "Menu", new Color(0.1f, 0.25f, 0.45f, 0.82f));
             manager.menuPanel = menu.gameObject;
-            var title = Label(menu, "Title", "FART RAFT", 150, center, new Vector2(0f, 300f), new Vector2(1400f, 200f));
-            title.color = new Color(0.75f, 1f, 0.35f);
-            Label(menu, "Subtitle", "Steer the raft together with fart power!", 44, center, new Vector2(0f, 180f), new Vector2(1400f, 80f));
+            var title = Label(menu, "Title", "FART RAFT", 160, center, new Vector2(0f, 300f), new Vector2(1400f, 210f));
+            title.color = new Color(0.75f, 1f, 0.25f);
+            Label(menu, "Subtitle", "Share one raft. Fart together. Don't fall off!", 46, center, new Vector2(0f, 175f), new Vector2(1400f, 80f));
             manager.soloButton = MakeButton(menu, "Solo", "SOLO\n(2 thumbs)", center, new Vector2(-540f, -10f), new Vector2(320f, 180f), PlayerColors[0], 44);
             manager.twoPlayersButton = MakeButton(menu, "TwoPlayers", "2 PLAYERS", center, new Vector2(-180f, -10f), new Vector2(320f, 180f), PlayerColors[1], 44);
             manager.threePlayersButton = MakeButton(menu, "ThreePlayers", "3 PLAYERS", center, new Vector2(180f, -10f), new Vector2(320f, 180f), PlayerColors[2], 44);
@@ -1115,7 +1245,7 @@ namespace FartRaft.EditorTools
             // Finish
             var finish = Panel(root, "Finish", new Color(0f, 0f, 0f, 0.7f));
             manager.finishPanel = finish.gameObject;
-            manager.finishText = Label(finish, "FinishText", "FINISH!", 90, center, new Vector2(0f, 150f), new Vector2(1200f, 400f));
+            manager.finishText = Label(finish, "FinishText", "FINISH!", 84, center, new Vector2(0f, 150f), new Vector2(1400f, 400f));
             manager.playAgainButton = MakeButton(finish, "PlayAgain", "PLAY AGAIN", center, new Vector2(-220f, -200f), new Vector2(380f, 140f), PlayerColors[2], 46);
             manager.finishMenuButton = MakeButton(finish, "BackToMenu", "MENU", center, new Vector2(220f, -200f), new Vector2(380f, 140f), PlayerColors[1], 46);
 
@@ -1144,7 +1274,7 @@ namespace FartRaft.EditorTools
             face.color = PlayerColors[index];
             face.raycastTarget = false;
 
-            var label = Label(rt, "Label", "P" + (index + 1), 56, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300f, 100f));
+            var label = Label(rt, "Label", AnimalNames[index], 50, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300f, 100f));
 
             var button = rt.gameObject.AddComponent<TouchFartButton>();
             button.seat = seat;
@@ -1221,7 +1351,525 @@ namespace FartRaft.EditorTools
             return button;
         }
 
-        // ---------------------------------------------------------------- Helpers
+        // ================================================================ Materials and textures
+
+        class Mats
+        {
+            public readonly Material slideWater = Textured("SlideWater", WaterTexture(), new Color(1f, 1f, 1f), 0.6f);
+            public readonly Material slideBody = Lit("SlideBody", new Color(0.30f, 0.78f, 0.72f), 0.3f);
+            public readonly Material foam = Lit("Foam", new Color(0.96f, 0.99f, 1f), 0.2f);
+            public readonly Material bumper = Lit("Bumper", new Color(0.62f, 0.32f, 0.85f), 0.3f);
+            public readonly Material spike = Lit("Spike", new Color(0.96f, 0.96f, 0.94f), 0.3f);
+            public readonly Material buoy = Lit("Buoy", new Color(1.00f, 0.48f, 0.15f), 0.35f);
+            public readonly Material magenta = Lit("Magenta", new Color(0.90f, 0.32f, 0.62f), 0.3f);
+            public readonly Material metal = Lit("Metal", new Color(0.70f, 0.72f, 0.78f), 0.5f);
+            public readonly Material wood = Lit("Wood", new Color(0.66f, 0.45f, 0.26f), 0.15f);
+            public readonly Material darkWood = Lit("DarkWood", new Color(0.45f, 0.29f, 0.16f), 0.15f);
+            public readonly Material bamboo = Lit("Bamboo", new Color(0.96f, 0.80f, 0.36f), 0.2f);
+            public readonly Material signBlue = Lit("SignBlue", new Color(0.18f, 0.45f, 0.85f), 0.3f);
+            public readonly Material signYellow = Lit("SignYellow", new Color(1.00f, 0.84f, 0.20f), 0.3f);
+            public readonly Material coral = Lit("Coral", new Color(0.95f, 0.50f, 0.43f), 0.05f);
+            public readonly Material coral2 = Lit("Coral2", new Color(0.98f, 0.64f, 0.50f), 0.05f);
+            public readonly Material coral3 = Lit("Coral3", new Color(0.88f, 0.42f, 0.40f), 0.05f);
+            public readonly Material grass = Lit("Grass", new Color(0.50f, 0.80f, 0.30f), 0.05f);
+            public readonly Material rock = Lit("Rock", new Color(0.42f, 0.41f, 0.43f), 0.05f);
+            public readonly Material rock2 = Lit("Rock2", new Color(0.33f, 0.33f, 0.36f), 0.05f);
+            public readonly Material trunk = Lit("Trunk", new Color(0.45f, 0.30f, 0.18f), 0.05f);
+            public readonly Material leaves = Lit("Leaves", new Color(0.30f, 0.62f, 0.25f), 0.05f);
+            public readonly Material leaves2 = Lit("Leaves2", new Color(0.45f, 0.72f, 0.25f), 0.05f);
+            public readonly Material pine = Lit("Pine", new Color(0.18f, 0.50f, 0.32f), 0.05f);
+            public readonly Material bush = Lit("Bush", new Color(0.28f, 0.60f, 0.24f), 0.05f);
+            public readonly Material mushroomCap = Lit("MushroomCap", new Color(0.90f, 0.20f, 0.20f), 0.3f);
+            public readonly Material mushroomStem = Lit("MushroomStem", new Color(0.97f, 0.93f, 0.85f), 0.1f);
+            public readonly Material cloud = Lit("Cloud", Color.white, 0f);
+            public readonly Material white = Lit("White", Color.white, 0.3f);
+            public readonly Material black = Lit("Black", new Color(0.05f, 0.05f, 0.06f), 0.5f);
+            public readonly Material eyeWhite = Lit("EyeWhite", Color.white, 0.7f);
+            public readonly Material raftTube = Lit("RaftTube", new Color(1.00f, 0.62f, 0.38f), 0.45f);
+            public readonly Material raftBand = Lit("RaftBand", new Color(0.25f, 0.72f, 0.72f), 0.45f);
+            public readonly Material raftFloor = Lit("RaftFloor", new Color(0.78f, 0.58f, 0.35f), 0.1f);
+            public readonly Material strap = Lit("Strap", new Color(0.80f, 0.20f, 0.20f), 0.3f);
+            public readonly Material[] animalMain =
+            {
+                Lit("CapyMain", new Color(0.68f, 0.44f, 0.26f), 0.15f),
+                Lit("HippoMain", new Color(0.36f, 0.50f, 0.78f), 0.15f),
+                Lit("CrocMain", new Color(0.38f, 0.72f, 0.28f), 0.15f),
+                Lit("GorillaMain", new Color(0.22f, 0.21f, 0.25f), 0.15f),
+            };
+            public readonly Material[] animalLight =
+            {
+                Lit("CapyLight", new Color(0.82f, 0.60f, 0.40f), 0.15f),
+                Lit("HippoLight", new Color(0.62f, 0.72f, 0.92f), 0.15f),
+                Lit("CrocLight", new Color(0.70f, 0.90f, 0.45f), 0.15f),
+                Lit("GorillaLight", new Color(0.52f, 0.45f, 0.42f), 0.15f),
+            };
+            public readonly Material puff = Unlit("Puff", SoftCircleTexture());
+            public readonly Material star = Unlit("Star", StarTexture());
+        }
+
+        static Shader LitShader()
+        {
+            if (GraphicsSettings.currentRenderPipeline != null)
+            {
+                var urp = Shader.Find("Universal Render Pipeline/Lit");
+                if (urp != null) return urp;
+                var hdrp = Shader.Find("HDRP/Lit");
+                if (hdrp != null) return hdrp;
+            }
+            return Shader.Find("Standard");
+        }
+
+        static Material Lit(string name, Color color, float smoothness)
+        {
+            var mat = LoadOrCreateMaterial(name, LitShader());
+            mat.color = color;
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
+            if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
+            mat.enableInstancing = true;
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material Textured(string name, Texture2D texture, Color color, float smoothness)
+        {
+            var mat = Lit(name, color, smoothness);
+            mat.mainTexture = texture;
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        // Sprites/Default is unlit, transparent and works in Built-in and URP.
+        static Material Unlit(string name, Texture2D texture)
+        {
+            var mat = LoadOrCreateMaterial(name, Shader.Find("Sprites/Default"));
+            mat.mainTexture = texture;
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material LoadOrCreateMaterial(string name, Shader shader)
+        {
+            string path = MaterialsFolder + "/" + name + ".mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null)
+            {
+                mat = new Material(shader);
+                AssetDatabase.CreateAsset(mat, path);
+            }
+            else
+            {
+                mat.shader = shader;
+            }
+            return mat;
+        }
+
+        delegate Color PixelFunction(float u, float v);
+
+        static Texture2D SaveTexture(string name, int size, PixelFunction pixel)
+        {
+            string path = GeneratedFolder + "/" + name + ".png";
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    tex.SetPixel(x, y, pixel((x + 0.5f) / size, (y + 0.5f) / size));
+                }
+            }
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        static Texture2D SoftCircleTexture()
+        {
+            return SaveTexture("Puff", 64, (u, v) =>
+            {
+                float dx = u * 2f - 1f, dy = v * 2f - 1f;
+                float a = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
+                return new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, a * 1.6f));
+            });
+        }
+
+        static Texture2D StarTexture()
+        {
+            return SaveTexture("Star", 64, (u, v) =>
+            {
+                float dx = u * 2f - 1f, dy = v * 2f - 1f;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                float angle = Mathf.Atan2(dy, dx);
+                float edge = 0.45f + 0.5f * Mathf.Pow(Mathf.Abs(Mathf.Cos(angle * 2.5f)), 3f);
+                return new Color(1f, 1f, 1f, Mathf.Clamp01((edge - r) * 12f));
+            });
+        }
+
+        // Cyan water with light flow streaks; every term repeats over the tile so it scrolls seamlessly.
+        static Texture2D WaterTexture()
+        {
+            Color deep = new Color(0.16f, 0.62f, 0.94f);
+            Color light = new Color(0.55f, 0.85f, 1f);
+            Color streak = new Color(0.88f, 0.97f, 1f);
+            return SaveTexture("SlideWater", 256, (u, v) =>
+            {
+                float a = u * Mathf.PI * 2f, b = v * Mathf.PI * 2f;
+                float waves = Mathf.Sin(6f * a + 2f * Mathf.Sin(2f * b)) * Mathf.Cos(3f * b + 1.5f * Mathf.Sin(a));
+                float ripples = Mathf.Sin(10f * a + 3f * Mathf.Sin(3f * b + a)) * Mathf.Sin(5f * b);
+                Color c = Color.Lerp(deep, light, 0.5f + 0.25f * waves);
+                if (waves > 0.78f || ripples > 0.92f) c = Color.Lerp(c, streak, 0.85f);
+                return c;
+            });
+        }
+
+        // ================================================================ Post-processing (URP only)
+
+        // Uses reflection so the project still compiles without the URP package.
+        static void AddPostProcessing(Camera cam)
+        {
+            if (GraphicsSettings.currentRenderPipeline == null)
+            {
+                Debug.Log("[Fart Raft] Built-in render pipeline: skipping bloom/color grading. Use Fart Raft > 3 to switch to URP.");
+                return;
+            }
+
+            var cameraDataType = FindType("UnityEngine.Rendering.Universal.UniversalAdditionalCameraData");
+            if (cameraDataType != null)
+            {
+                var data = cam.GetComponent(cameraDataType);
+                if (data == null) data = cam.gameObject.AddComponent(cameraDataType);
+                SetMember(data, "renderPostProcessing", true);
+                SetMember(data, "antialiasing", "FastApproximateAntialiasing");
+            }
+
+            var volumeType = FindType("UnityEngine.Rendering.Volume");
+            var profileType = FindType("UnityEngine.Rendering.VolumeProfile");
+            if (volumeType == null || profileType == null) return;
+
+            var profile = ScriptableObject.CreateInstance(profileType);
+            AssetDatabase.CreateAsset(profile, PostProcessingPath);
+
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Tonemapping", ("mode", "Neutral"));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.4f), ("threshold", 1f), ("scatter", 0.6f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.ColorAdjustments", ("postExposure", 0.2f), ("contrast", 8f), ("saturation", 22f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Vignette", ("intensity", 0.18f), ("smoothness", 0.4f));
+            EditorUtility.SetDirty(profile);
+
+            var volumeGo = new GameObject("PostProcessing");
+            var volume = volumeGo.AddComponent(volumeType);
+            SetMember(volume, "isGlobal", true);
+            SetMember(volume, "sharedProfile", profile);
+        }
+
+        static void AddOverride(ScriptableObject profile, string typeName, params (string name, object value)[] values)
+        {
+            var type = FindType(typeName);
+            var add = profile.GetType().GetMethod("Add", new[] { typeof(System.Type), typeof(bool) });
+            if (type == null || add == null) return;
+
+            var component = (ScriptableObject)add.Invoke(profile, new object[] { type, true });
+            component.name = type.Name;
+            component.hideFlags = HideFlags.HideInInspector | HideFlags.HideInHierarchy;
+            AssetDatabase.AddObjectToAsset(component, profile);
+
+            foreach (var (name, value) in values)
+            {
+                var field = type.GetField(name);
+                var parameter = field?.GetValue(component);
+                var valueProperty = parameter?.GetType().GetProperties().FirstOrDefault(p => p.Name == "value" && p.CanWrite);
+                if (valueProperty == null) continue;
+                valueProperty.SetValue(parameter, ConvertValue(value, valueProperty.PropertyType));
+            }
+        }
+
+        static System.Type FindType(string fullName)
+        {
+            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var type = assembly.GetType(fullName);
+                if (type != null) return type;
+            }
+            return null;
+        }
+
+        static void SetMember(object target, string name, object value)
+        {
+            var type = target.GetType();
+            var field = type.GetField(name);
+            if (field != null)
+            {
+                field.SetValue(target, ConvertValue(value, field.FieldType));
+                return;
+            }
+            var property = type.GetProperties().FirstOrDefault(p => p.Name == name && p.CanWrite);
+            if (property != null) property.SetValue(target, ConvertValue(value, property.PropertyType));
+        }
+
+        static object ConvertValue(object value, System.Type type)
+        {
+            if (type.IsEnum && value is string s) return System.Enum.Parse(type, s);
+            return value;
+        }
+
+        // ================================================================ Physics material
+
+#if UNITY_6000_0_OR_NEWER
+        static PhysicsMaterial slippery;
+#else
+        static PhysicMaterial slippery;
+#endif
+
+        static void SetSlippery(Collider collider)
+        {
+            if (slippery == null)
+            {
+#if UNITY_6000_0_OR_NEWER
+                slippery = new PhysicsMaterial("Slippery")
+                {
+                    frictionCombine = PhysicsMaterialCombine.Minimum,
+                    bounceCombine = PhysicsMaterialCombine.Maximum,
+#else
+                slippery = new PhysicMaterial("Slippery")
+                {
+                    frictionCombine = PhysicMaterialCombine.Minimum,
+                    bounceCombine = PhysicMaterialCombine.Maximum,
+#endif
+                    dynamicFriction = 0.02f,
+                    staticFriction = 0.02f,
+                    bounciness = 0.3f,
+                };
+                AssetDatabase.CreateAsset(slippery, GeneratedFolder + "/Slippery.asset");
+            }
+            collider.sharedMaterial = slippery;
+        }
+
+        // ================================================================ Meshes
+
+        static Mesh coneMesh;
+        static Mesh pillarMesh;
+        static readonly Mesh[] rockMeshes = new Mesh[3];
+        static int meshCounter;
+
+        static void ResetCaches()
+        {
+            coneMesh = null;
+            pillarMesh = null;
+            for (int i = 0; i < rockMeshes.Length; i++) rockMeshes[i] = null;
+            slippery = null;
+            meshCounter = 0;
+        }
+
+        static void SaveMesh(Mesh mesh)
+        {
+            AssetDatabase.CreateAsset(mesh, GeneratedFolder + "/" + mesh.name + "_" + (meshCounter++) + ".asset");
+        }
+
+        static Mesh BuildFlatMesh(string name, List<Vector3> vertices, List<int> triangles)
+        {
+            var mesh = new Mesh { name = name };
+            if (vertices.Count > 65000) mesh.indexFormat = IndexFormat.UInt32;
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            SaveMesh(mesh);
+            return mesh;
+        }
+
+        // 8-sided low-poly cone: base radius 0.5 at y=0, tip at y=1.
+        static Mesh ConeMesh()
+        {
+            if (coneMesh != null) return coneMesh;
+            const int sides = 8;
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            Vector3 tip = Vector3.up;
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = i * Mathf.PI * 2f / sides;
+                float a1 = (i + 1) * Mathf.PI * 2f / sides;
+                Vector3 p0 = new Vector3(Mathf.Cos(a0) * 0.5f, 0f, Mathf.Sin(a0) * 0.5f);
+                Vector3 p1 = new Vector3(Mathf.Cos(a1) * 0.5f, 0f, Mathf.Sin(a1) * 0.5f);
+                Vector3 mid = (p0 + p1) * 0.5f;
+                AddTriangle(vertices, triangles, tip, p0, p1, new Vector3(mid.x, 0f, mid.z));
+                AddTriangle(vertices, triangles, Vector3.zero, p0, p1, Vector3.down);
+            }
+            coneMesh = BuildFlatMesh("Cone", vertices, triangles);
+            return coneMesh;
+        }
+
+        // 9-sided low-poly column: radius 0.5, from y=0 to y=1.
+        static Mesh PillarMesh()
+        {
+            if (pillarMesh != null) return pillarMesh;
+            pillarMesh = CylinderMesh("Pillar", 0.5f, 1f, 9, false, 0f);
+            return pillarMesh;
+        }
+
+        static Mesh CylinderMesh(string name, float radius, float height, int sides, bool centered, float baseY = float.NaN)
+        {
+            float y0 = float.IsNaN(baseY) ? -height * 0.5f : baseY;
+            float y1 = y0 + height;
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = i * Mathf.PI * 2f / sides;
+                float a1 = (i + 1) * Mathf.PI * 2f / sides;
+                Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)) * radius;
+                Vector3 d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1)) * radius;
+                Vector3 b0 = d0 + Vector3.up * y0, b1 = d1 + Vector3.up * y0;
+                Vector3 t0 = d0 + Vector3.up * y1, t1 = d1 + Vector3.up * y1;
+                AddQuad(vertices, triangles, b0, b1, t1, t0, (d0 + d1) * 0.5f);
+                AddTriangle(vertices, triangles, Vector3.up * y1, t0, t1, Vector3.up);
+                AddTriangle(vertices, triangles, Vector3.up * y0, b0, b1, Vector3.down);
+            }
+            return BuildFlatMesh(name, vertices, triangles);
+        }
+
+        static Mesh TorusMesh(string name, float majorRadius, float minorRadius, int majorSegments, int minorSegments)
+        {
+            var vertices = new List<Vector3>();
+            var normals = new List<Vector3>();
+            for (int i = 0; i <= majorSegments; i++)
+            {
+                float u = i * Mathf.PI * 2f / majorSegments;
+                for (int j = 0; j <= minorSegments; j++)
+                {
+                    float v = j * Mathf.PI * 2f / minorSegments;
+                    Vector3 normal = new Vector3(Mathf.Cos(v) * Mathf.Cos(u), Mathf.Sin(v), Mathf.Cos(v) * Mathf.Sin(u));
+                    Vector3 ringCenter = new Vector3(Mathf.Cos(u), 0f, Mathf.Sin(u)) * majorRadius;
+                    vertices.Add(ringCenter + normal * minorRadius);
+                    normals.Add(normal);
+                }
+            }
+
+            var triangles = new List<int>();
+            int stride = minorSegments + 1;
+            for (int i = 0; i < majorSegments; i++)
+            {
+                for (int j = 0; j < minorSegments; j++)
+                {
+                    int a = i * stride + j, b = (i + 1) * stride + j, c = (i + 1) * stride + j + 1, d = i * stride + j + 1;
+                    AddIndexedTriangle(vertices, triangles, a, b, c, normals[a]);
+                    AddIndexedTriangle(vertices, triangles, a, c, d, normals[a]);
+                }
+            }
+
+            var mesh = new Mesh { name = name };
+            mesh.SetVertices(vertices);
+            mesh.SetNormals(normals);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateBounds();
+            SaveMesh(mesh);
+            return mesh;
+        }
+
+        // Faceted low-poly boulder: a jittered, subdivided icosahedron (radius about 0.5).
+        static Mesh RockMesh(int variant)
+        {
+            if (rockMeshes[variant] != null) return rockMeshes[variant];
+
+            float t = (1f + Mathf.Sqrt(5f)) * 0.5f;
+            var points = new List<Vector3>
+            {
+                new Vector3(-1, t, 0), new Vector3(1, t, 0), new Vector3(-1, -t, 0), new Vector3(1, -t, 0),
+                new Vector3(0, -1, t), new Vector3(0, 1, t), new Vector3(0, -1, -t), new Vector3(0, 1, -t),
+                new Vector3(t, 0, -1), new Vector3(t, 0, 1), new Vector3(-t, 0, -1), new Vector3(-t, 0, 1),
+            };
+            int[] faces =
+            {
+                0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+                3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1,
+            };
+
+            var midpoints = new Dictionary<long, int>();
+            int Midpoint(int a, int b)
+            {
+                long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+                if (midpoints.TryGetValue(key, out int index)) return index;
+                points.Add((points[a] + points[b]) * 0.5f);
+                midpoints[key] = points.Count - 1;
+                return points.Count - 1;
+            }
+
+            var subdivided = new List<int>();
+            for (int f = 0; f < faces.Length; f += 3)
+            {
+                int a = faces[f], b = faces[f + 1], c = faces[f + 2];
+                int ab = Midpoint(a, b), bc = Midpoint(b, c), ca = Midpoint(c, a);
+                subdivided.AddRange(new[] { a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca });
+            }
+
+            var random = new System.Random(100 + variant);
+            for (int i = 0; i < points.Count; i++)
+            {
+                Vector3 p = points[i].normalized * (0.5f * (0.8f + (float)random.NextDouble() * 0.35f));
+                points[i] = new Vector3(p.x, p.y * 0.8f, p.z);
+            }
+
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            for (int f = 0; f < subdivided.Count; f += 3)
+            {
+                Vector3 a = points[subdivided[f]], b = points[subdivided[f + 1]], c = points[subdivided[f + 2]];
+                AddTriangle(vertices, triangles, a, b, c, (a + b + c) / 3f);
+            }
+            rockMeshes[variant] = BuildFlatMesh("Rock" + variant, vertices, triangles);
+            return rockMeshes[variant];
+        }
+
+        static void AddQuad(List<Vector3> vertices, List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 outward)
+        {
+            AddTriangle(vertices, triangles, a, b, c, outward);
+            AddTriangle(vertices, triangles, a, c, d, outward);
+        }
+
+        static void AddTriangle(List<Vector3> vertices, List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Vector3 outward)
+        {
+            // Unity treats Cross(b - a, c - a) as the front-face normal.
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), outward) < 0f)
+            {
+                Vector3 swap = b;
+                b = c;
+                c = swap;
+            }
+            int start = vertices.Count;
+            vertices.Add(a);
+            vertices.Add(b);
+            vertices.Add(c);
+            triangles.Add(start);
+            triangles.Add(start + 1);
+            triangles.Add(start + 2);
+        }
+
+        static void AddIndexedTriangle(List<Vector3> vertices, List<int> triangles, int a, int b, int c, Vector3 outward)
+        {
+            if (Vector3.Dot(Vector3.Cross(vertices[b] - vertices[a], vertices[c] - vertices[a]), outward) < 0f)
+            {
+                int swap = b;
+                b = c;
+                c = swap;
+            }
+            triangles.Add(a);
+            triangles.Add(b);
+            triangles.Add(c);
+        }
+
+        // ================================================================ Helpers
+
+        static float R(System.Random random)
+        {
+            return (float)random.NextDouble();
+        }
+
+        static void NoShadows(GameObject go)
+        {
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+            {
+                r.shadowCastingMode = ShadowCastingMode.Off;
+            }
+        }
 
         static GameObject Prim(PrimitiveType type, string name, Transform parent, Vector3 pos, Vector3 scale, Material mat, bool keepCollider)
         {
@@ -1232,6 +1880,17 @@ namespace FartRaft.EditorTools
             go.transform.localScale = scale;
             go.GetComponent<Renderer>().sharedMaterial = mat;
             if (!keepCollider) Object.DestroyImmediate(go.GetComponent<Collider>());
+            return go;
+        }
+
+        static GameObject MeshObject(Mesh mesh, string name, Transform parent, Vector3 pos, Vector3 scale, Material mat)
+        {
+            var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localScale = scale;
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
             return go;
         }
 

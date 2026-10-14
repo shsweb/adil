@@ -14,7 +14,9 @@ namespace FartRaft
         public TouchFartButton[] buttons = new TouchFartButton[4];
         public Transform startPoint;
         public CameraFollow cameraFollow;
+        public Vector3[] coursePath;
         public int checkpointCount = 3;
+        public ParticleSystem impactEffect;
 
         [Header("UI")]
         public GameObject menuPanel;
@@ -31,21 +33,28 @@ namespace FartRaft
         public Text messageText;
         public Text syncText;
         public Text finishText;
+        public Text fallsText;
+        public Image progressFill;
 
         [Header("Rules")]
         [Tooltip("Thrust multiplier while every player farts at the same time.")]
         public float syncBoost = 1.5f;
+        [Tooltip("How far below the last checkpoint the raft can drop before it counts as a fall.")]
+        public float fallDepth = 10f;
 
-        static readonly Vector2[] TwoSeatLayout = { new Vector2(-1.3f, -1.3f), new Vector2(1.3f, -1.3f) };
-        static readonly Vector2[] ThreeSeatLayout = { new Vector2(-1.3f, -1.3f), new Vector2(1.3f, -1.3f), new Vector2(0f, 1.3f) };
-        static readonly Vector2[] FourSeatLayout = { new Vector2(-1.3f, -1.3f), new Vector2(1.3f, -1.3f), new Vector2(-1.3f, 1.3f), new Vector2(1.3f, 1.3f) };
+        static readonly float[] TwoSeatAngles = { 215f, 145f };
+        static readonly float[] ThreeSeatAngles = { 230f, 130f, 180f };
+        static readonly float[] FourSeatAngles = { 225f, 135f, 315f, 45f };
+        static readonly string[] AnimalNames = { "CAPY", "HIPPO", "CROC", "GORILLA" };
 
         int playerCount = 2;
         bool solo;
         bool racing;
         bool syncActive;
         float raceTime;
+        int falls;
         int nextCheckpoint;
+        int progressIndex = -1;
         Transform respawnPoint;
         float messageHideTime;
         Coroutine countdown;
@@ -78,6 +87,7 @@ namespace FartRaft
             menuPanel.SetActive(true);
             hudPanel.SetActive(false);
             finishPanel.SetActive(false);
+            ConfigureSeats();
             ResetRaft(startPoint);
         }
 
@@ -94,10 +104,11 @@ namespace FartRaft
 
             racing = false;
             raceTime = 0f;
+            falls = 0;
             nextCheckpoint = 0;
             respawnPoint = startPoint;
             ResetRaft(startPoint);
-            UpdateTimer();
+            UpdateHud();
             countdown = StartCoroutine(Countdown());
         }
 
@@ -123,7 +134,7 @@ namespace FartRaft
 
         void ConfigureSeats()
         {
-            Vector2[] layout = playerCount == 2 ? TwoSeatLayout : playerCount == 3 ? ThreeSeatLayout : FourSeatLayout;
+            float[] angles = playerCount == 2 ? TwoSeatAngles : playerCount == 3 ? ThreeSeatAngles : FourSeatAngles;
 
             for (int i = 0; i < seats.Length; i++)
             {
@@ -132,23 +143,24 @@ namespace FartRaft
                 buttons[i].gameObject.SetActive(active);
                 if (!active) continue;
 
-                Vector3 local = seats[i].transform.localPosition;
-                seats[i].transform.localPosition = new Vector3(layout[i].x, local.y, layout[i].y);
+                seats[i].SetAngle(angles[i]);
                 // Total thrust stays the same regardless of player count.
                 seats[i].thrustScale = 2f / playerCount;
                 seats[i].ResetGas();
-                buttons[i].SetLabel(solo ? (i == 0 ? "LEFT" : "RIGHT") : "P" + (i + 1));
+                buttons[i].SetLabel(solo ? (i == 0 ? "LEFT" : "RIGHT") : AnimalNames[i]);
             }
         }
 
         void SetLocked(bool locked)
         {
             foreach (var seat in seats) seat.locked = locked;
+            raft.SetFrozen(locked);
         }
 
         void ResetRaft(Transform point)
         {
             raft.Respawn(point.position, point.rotation);
+            progressIndex = -1;
             if (cameraFollow != null) cameraFollow.Snap();
         }
 
@@ -172,11 +184,26 @@ namespace FartRaft
             if (racing)
             {
                 raceTime += Time.deltaTime;
-                UpdateTimer();
+                if (raft.transform.position.y < respawnPoint.position.y - fallDepth) OnFell();
             }
 
+            UpdateHud();
             syncText.enabled = syncActive;
             if (messageText.enabled && Time.time > messageHideTime) messageText.enabled = false;
+        }
+
+        void OnFell()
+        {
+            falls++;
+            ShowMessage("WHOOPS! Fell off", 1.4f);
+            ResetRaft(respawnPoint);
+        }
+
+        public void PlayImpact(Vector3 position)
+        {
+            if (impactEffect == null) return;
+            impactEffect.transform.position = position + Vector3.up * 0.8f;
+            impactEffect.Emit(14);
         }
 
         public void OnCheckpoint(Checkpoint checkpoint)
@@ -190,6 +217,7 @@ namespace FartRaft
         public void OnHazard()
         {
             if (!racing) return;
+            falls++;
             ShowMessage("SPLAT! Back to checkpoint", 1.4f);
             ResetRaft(respawnPoint);
         }
@@ -216,7 +244,8 @@ namespace FartRaft
                 PlayerPrefs.Save();
             }
 
-            finishText.text = "FINISH!\nTime " + FormatTime(raceTime) + "\n" + (record ? "NEW BEST!" : "Best " + FormatTime(best));
+            finishText.text = "FINISH!\nTime " + FormatTime(raceTime) + "   Falls " + falls + "\n" +
+                              (record ? "NEW BEST!" : "Best " + FormatTime(best));
             finishPanel.SetActive(true);
         }
 
@@ -227,9 +256,15 @@ namespace FartRaft
             messageHideTime = Time.time + duration;
         }
 
-        void UpdateTimer()
+        void UpdateHud()
         {
             timerText.text = FormatTime(raceTime);
+            if (fallsText != null) fallsText.text = "FALLS " + falls;
+            if (progressFill != null && coursePath != null && coursePath.Length > 1)
+            {
+                progressIndex = CoursePath.FindNearest(coursePath, raft.transform.position, progressIndex);
+                progressFill.fillAmount = (float)progressIndex / (coursePath.Length - 1);
+            }
         }
 
         static string FormatTime(float seconds)
