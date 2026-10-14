@@ -17,23 +17,27 @@ one round inflatable raft, and fart it down floating water slides high above the
 - Grab a floating **BEANS** can for 4 seconds of **MEGA FART** (much stronger farts and a full gas tank).
 - When **everyone farts at the same time** you get a **SYNC BOOST**.
 - Each fart drains your gas ring. If it empties, you're out until it refills.
-- **3 stages**, picked with the **STAGE** button on the menu; **NEXT STAGE** on the finish screen goes to the next one:
+- **3 stages**, picked with the stage cards in the lobby; **NEXT STAGE** on the finish screen goes to the next one:
   1. **Sunny Slides**: 4 slides and 4 pools, 7 checkpoints. Warm-up.
   2. **Jungle Rapids**: longer, with sliding blocks, more buoys and spinners. 6 checkpoints.
   3. **Volcano Run**: steepest and busiest, with pendulums, four-arm spinners and more open edges. 8 checkpoints.
 - Your best time is saved per stage, mode and player count.
-- **Difficulty** (tap **MODE** on the menu, the choice is remembered):
+- **Difficulty** (**SETTINGS > MODE** in the lobby, the choice is remembered):
   - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer.
     Animals jump to the right spot instantly, farts are stronger, gas lasts longer, obstacles move slower
     and top speed is capped. The first spiky hit only bounces you (**OUCH!**); then the raft blinks for 2 s and passes through spiky things. Another hit within 4 seconds of the OUCH (after the blinking) kills.
   - **HARD**: the original physics - no auto-forward, the raft spins freely, one spiky hit kills.
 - HUD: progress bar, timer, death counter and name tags over each animal.
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
-- Modes: **Solo**, **2, 3 or 4 players**.
-- **CHARACTERS** on the menu: the camera zooms onto the raft and every player flips through animals with **< >**
-  (capy, penguin, croc, gorilla). Each animal has its own fart pitch and fart cloud color and does a happy dance
-  when picked and at the finish. Picks are saved.
-  The animated penguin is a free CC0 Gobkit model in `Characters/` (see `Characters/CREDITS.txt`) and needs the
+- **Lobby** (like Fart Together): the animals stand in a row in a little 3D canyon.
+  - Tap **+ JOIN** over an empty spot to add a player (1-4 players, solo works too); tap the last player's tag to remove them.
+  - **< >** under each animal picks the character (capy, penguin, croc, gorilla). Each animal has its own fart pitch
+    and fart cloud color, farts now and then while waiting and dances when picked. Picks are saved.
+  - **CHOOSE STAGE** cards along the bottom (Ice World and Sewer Splash are marked *coming soon*), **PLAY!** bottom right.
+  - **SETTINGS**: mode Easy/Hard, music on/off, sound on/off.
+- **Music**: a happy lobby song and one song per stage (CC0, see `Audio/Music/CREDITS.txt`). It speeds up a little
+  near the finish and stops when you cross the line.
+- The animated penguin is a free CC0 Gobkit model in `Characters/` (see `Characters/CREDITS.txt`) and needs the
   **glTFast** package: *Window > Package Manager > + > Install package by name* > `com.unity.cloud.gltfast`.
   Without it the penguin does not show up.
 

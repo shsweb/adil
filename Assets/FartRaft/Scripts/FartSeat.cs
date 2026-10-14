@@ -108,15 +108,8 @@ namespace FartRaft
             leftArm = skin.leftArm;
             rightArm = skin.rightArm;
 
-            var info = CharacterRoster.All[index];
-            voicePitch = info.pitch;
-            if (fartParticles != null)
-            {
-                var main = fartParticles.main;
-                main.startColor = new ParticleSystem.MinMaxGradient(
-                    new Color(info.puff.r, info.puff.g, info.puff.b, 0.95f),
-                    new Color(Mathf.Lerp(info.puff.r, 1f, 0.35f), Mathf.Lerp(info.puff.g, 1f, 0.35f), Mathf.Lerp(info.puff.b, 1f, 0.35f), 0.85f));
-            }
+            voicePitch = CharacterRoster.All[index].pitch;
+            CharacterRoster.ApplyPuff(fartParticles, index);
         }
 
         // Happy dance with a fart, used when the character is picked and at the finish.
@@ -283,6 +276,7 @@ namespace FartRaft
 
             if (fartAudio != null)
             {
+                fartAudio.mute = !GameSettings.SoundOn;
                 if (fartAudio.loop)
                 {
                     fartAudio.pitch = voicePitch;

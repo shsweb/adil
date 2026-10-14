@@ -1,0 +1,6 @@
+All music is from opengameart.org and released under CC0 (public domain).
+
+music_lobby   Happy Clappy Loop by OwlishMedia      https://opengameart.org/content/happy-clappy-loop (converted to OGG)
+music_stage1  Banana Track by skrjablin             https://opengameart.org/content/banana-track
+music_stage2  Jump by ThePixel                      https://opengameart.org/content/jump
+music_stage3  Head in the Sand by congusbongus      https://opengameart.org/content/head-in-the-sand-seamless-loop

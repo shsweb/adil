@@ -29,6 +29,16 @@ namespace FartRaft
         public static int Default(int player) => Defaults[player % Defaults.Length];
         public static int Fallback(int player) => ClassicFallbacks[player % ClassicFallbacks.Length];
 
+        public static void ApplyPuff(ParticleSystem particles, int index)
+        {
+            if (particles == null) return;
+            Color c = All[index].puff;
+            var main = particles.main;
+            main.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(c.r, c.g, c.b, 0.95f),
+                new Color(Mathf.Lerp(c.r, 1f, 0.35f), Mathf.Lerp(c.g, 1f, 0.35f), Mathf.Lerp(c.b, 1f, 0.35f), 0.85f));
+        }
+
         static string Key(int player) => "character_v2_p" + (player + 1);
 
         public static int Load(int player) => Mathf.Clamp(PlayerPrefs.GetInt(Key(player), Default(player)), 0, All.Length - 1);

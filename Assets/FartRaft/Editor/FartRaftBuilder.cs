@@ -134,6 +134,9 @@ namespace FartRaft.EditorTools
             manager.gameAudio = BuildGameAudio(managerGo);
             manager.stageIndex = index;
             manager.stageNames = Stages.Select(st => st.name).ToArray();
+            manager.lobbyMusic = LoadMusic("music_lobby");
+            manager.raceMusic = LoadMusic("music_stage" + (index + 1));
+            BuildLobby(m, random, manager);
 
             BuildUI(manager, seats);
 
@@ -1578,26 +1581,8 @@ namespace FartRaft.EditorTools
             }
             manager.joysticks = joysticks;
 
-            // Menu
-            var menu = Panel(root, "Menu", new Color(0.1f, 0.25f, 0.45f, 0.82f));
-            manager.menuPanel = menu.gameObject;
-            var title = Label(menu, "Title", "FART RAFT", 160, center, new Vector2(0f, 300f), new Vector2(1400f, 210f));
-            title.color = new Color(0.75f, 1f, 0.25f);
-            Label(menu, "Subtitle", "Share one raft. Fart together. Don't fall off!", 46, center, new Vector2(0f, 175f), new Vector2(1400f, 80f));
-            manager.soloButton = MakeButton(menu, "Solo", "SOLO", center, new Vector2(-540f, -10f), new Vector2(320f, 180f), PlayerColors[0], 44);
-            manager.twoPlayersButton = MakeButton(menu, "TwoPlayers", "2 PLAYERS", center, new Vector2(-180f, -10f), new Vector2(320f, 180f), PlayerColors[1], 44);
-            manager.threePlayersButton = MakeButton(menu, "ThreePlayers", "3 PLAYERS", center, new Vector2(180f, -10f), new Vector2(320f, 180f), PlayerColors[2], 44);
-            manager.fourPlayersButton = MakeButton(menu, "FourPlayers", "4 PLAYERS", center, new Vector2(540f, -10f), new Vector2(320f, 180f), PlayerColors[3], 44);
-            var dark = new Color(0.15f, 0.2f, 0.3f, 0.9f);
-            manager.stageButton = MakeButton(menu, "Stage", "STAGE 1", center, new Vector2(-510f, -195f), new Vector2(620f, 110f), dark, 38);
-            manager.stageText = manager.stageButton.GetComponentInChildren<Text>();
-            manager.difficultyButton = MakeButton(menu, "Difficulty", "MODE: EASY", center, new Vector2(60f, -195f), new Vector2(440f, 110f), dark, 38);
-            manager.difficultyText = manager.difficultyButton.GetComponentInChildren<Text>();
-            manager.charactersButton = MakeButton(menu, "Characters", "CHARACTERS", center, new Vector2(530f, -195f), new Vector2(420f, 110f), new Color(0.85f, 0.35f, 0.6f, 0.95f), 38);
-            Label(menu, "MenuHint", "STAGE = pick a course. MODE: EASY = raft goes by itself, HARD = like the real game. CHARACTERS = pick your animal!", 30, center, new Vector2(0f, -300f), new Vector2(1700f, 60f));
-            Label(menu, "MenuHint2", "Everyone plays on the same phone - each player gets a joystick in one corner.", 32, center, new Vector2(0f, -360f), new Vector2(1600f, 60f));
-
-            BuildCharacterPanel(root, manager, seats);
+            BuildLobbyUI(root, manager);
+            BuildSettingsUI(root, manager);
 
             // Finish
             var finish = Panel(root, "Finish", new Color(0f, 0f, 0f, 0.7f));
@@ -1617,46 +1602,6 @@ namespace FartRaft.EditorTools
 
             hud.gameObject.SetActive(false);
             finish.gameObject.SetActive(false);
-        }
-
-        // See-through screen: the camera zooms onto the raft and each player flips through animals with < >.
-        static void BuildCharacterPanel(Transform root, GameManager manager, FartSeat[] seats)
-        {
-            Vector2 center = new Vector2(0.5f, 0.5f);
-            var panel = Panel(root, "Characters", new Color(0.1f, 0.25f, 0.45f, 0.12f));
-            manager.characterPanel = panel.gameObject;
-
-            var title = Label(panel, "Title", "PICK YOUR ANIMAL!", 90, new Vector2(0.5f, 1f), new Vector2(0f, -85f), new Vector2(1400f, 130f));
-            title.color = new Color(0.75f, 1f, 0.25f);
-            manager.charactersDoneButton = MakeButton(panel, "Done", "DONE", new Vector2(1f, 1f), new Vector2(-170f, -85f), new Vector2(260f, 110f), PlayerColors[2], 46);
-
-            for (int i = 0; i < seats.Length; i++)
-            {
-                var tag = Label(panel, "Tag_P" + (i + 1), "P" + (i + 1), 44, center, Vector2.zero, new Vector2(120f, 60f));
-                tag.color = Color.Lerp(PlayerColors[i], Color.white, 0.3f);
-                var follow = tag.gameObject.AddComponent<WorldLabel>();
-                follow.target = seats[i].transform;
-                follow.offset = new Vector3(0f, 1.9f, 0f);
-
-                var card = UIObject("Card_P" + (i + 1), panel);
-                Place(card, new Vector2(0.5f, 0f), new Vector2(-690f + i * 460f, 150f), new Vector2(430f, 230f));
-                var cardImage = card.gameObject.AddComponent<Image>();
-                cardImage.sprite = roundedSprite;
-                cardImage.type = Image.Type.Sliced;
-                cardImage.color = new Color(PlayerColors[i].r * 0.55f, PlayerColors[i].g * 0.55f, PlayerColors[i].b * 0.55f, 0.92f);
-
-                var player = Label(card, "Player", "PLAYER " + (i + 1), 34, new Vector2(0.5f, 1f), new Vector2(0f, -36f), new Vector2(400f, 50f));
-                player.color = Color.Lerp(PlayerColors[i], Color.white, 0.4f);
-                var name = Label(card, "Name", SeatName(seats[i]), 48, center, new Vector2(0f, -25f), new Vector2(185f, 80f));
-                name.resizeTextForBestFit = true;
-                name.resizeTextMinSize = 22;
-                name.resizeTextMaxSize = 48;
-                manager.characterNames[i] = name;
-                manager.characterPrevButtons[i] = MakeButton(card, "Prev", "<", center, new Vector2(-150f, -25f), new Vector2(110f, 130f), PlayerColors[i], 70);
-                manager.characterNextButtons[i] = MakeButton(card, "Next", ">", center, new Vector2(150f, -25f), new Vector2(110f, 130f), PlayerColors[i], 70);
-            }
-
-            panel.gameObject.SetActive(false);
         }
 
         static FartJoystick Joystick(Transform parent, int index, Vector2 anchor, Vector2 pos, FartSeat seat)

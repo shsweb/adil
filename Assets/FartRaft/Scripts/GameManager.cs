@@ -32,13 +32,7 @@ namespace FartRaft
         public GameObject menuPanel;
         public GameObject hudPanel;
         public GameObject finishPanel;
-        public Button soloButton;
-        public Button twoPlayersButton;
-        public Button threePlayersButton;
-        public Button fourPlayersButton;
         public Button difficultyButton;
-        public Button stageButton;
-        public Text stageText;
         public Button nextStageButton;
         public Text difficultyText;
         public Button playAgainButton;
@@ -51,14 +45,35 @@ namespace FartRaft
         public Text deathsText;
         public Text hintText;
         public Text[] nameTags = new Text[4];
-        public Button charactersButton;
-        public GameObject characterPanel;
-        public Button charactersDoneButton;
+        public Image progressFill;
+        public Image flash;
+
+        [Header("Lobby")]
+        public Transform lobbyView;
+        public LobbyAvatar[] lobbyAvatars = new LobbyAvatar[4];
+        public Button[] joinButtons = new Button[4];
+        public Text[] joinTexts = new Text[4];
+        public GameObject[] joinedMarks = new GameObject[4];
+        public GameObject[] pickers = new GameObject[4];
         public Text[] characterNames = new Text[4];
         public Button[] characterPrevButtons = new Button[4];
         public Button[] characterNextButtons = new Button[4];
-        public Image progressFill;
-        public Image flash;
+        public Button[] stageCards = new Button[0];
+        public GameObject[] stageHighlights = new GameObject[0];
+        public Button playButton;
+
+        [Header("Settings")]
+        public Button settingsButton;
+        public GameObject settingsPanel;
+        public Button settingsCloseButton;
+        public Button musicButton;
+        public Text musicText;
+        public Button soundButton;
+        public Text soundText;
+
+        [Header("Music")]
+        public AudioClip lobbyMusic;
+        public AudioClip raceMusic;
 
         [Header("Rules")]
         [Tooltip("Thrust multiplier while every player farts at the same time.")]
@@ -87,8 +102,6 @@ namespace FartRaft
             new[] { 135f, 225f, 315f, 45f },
         };
         static readonly float[] PowerPerPlayer = { 1f, 0.8f, 0.7f, 0.62f };
-        // Character select: everyone stands on the far side of the raft, facing the camera.
-        static readonly float[] ShowcaseAngles = { 300f, 340f, 20f, 60f };
 
         int playerCount = 2;
         bool racing;
@@ -125,46 +138,52 @@ namespace FartRaft
             Time.fixedDeltaTime = 1f / 60f;
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
-            soloButton.onClick.AddListener(() => StartGame(1));
-            twoPlayersButton.onClick.AddListener(() => StartGame(2));
-            threePlayersButton.onClick.AddListener(() => StartGame(3));
-            fourPlayersButton.onClick.AddListener(() => StartGame(4));
             playAgainButton.onClick.AddListener(() => StartGame(playerCount));
             finishMenuButton.onClick.AddListener(ShowMenu);
             hudMenuButton.onClick.AddListener(ShowMenu);
             if (difficultyButton != null) difficultyButton.onClick.AddListener(ToggleDifficulty);
-            if (stageButton != null) stageButton.onClick.AddListener(() => LoadStage((stageIndex + 1) % stageNames.Length, 0));
             if (nextStageButton != null) nextStageButton.onClick.AddListener(() => LoadStage(stageIndex + 1, playerCount));
-            if (stageText != null) stageText.text = "STAGE " + (stageIndex + 1) + ": " + StageName + "  >";
 
             difficulty = (Difficulty)PlayerPrefs.GetInt(DifficultyKey, (int)difficulty);
             ApplyDifficulty();
 
-            if (charactersButton != null) charactersButton.onClick.AddListener(ShowCharacters);
-            if (charactersDoneButton != null) charactersDoneButton.onClick.AddListener(ShowMenu);
+            playerCount = GameSettings.Players;
             for (int i = 0; i < seats.Length; i++)
             {
                 int player = i;
-                if (i < characterPrevButtons.Length && characterPrevButtons[i] != null) characterPrevButtons[i].onClick.AddListener(() => CycleCharacter(player, -1));
-                if (i < characterNextButtons.Length && characterNextButtons[i] != null) characterNextButtons[i].onClick.AddListener(() => CycleCharacter(player, 1));
+                if (Has(characterPrevButtons, i)) characterPrevButtons[i].onClick.AddListener(() => CycleCharacter(player, -1));
+                if (Has(characterNextButtons, i)) characterNextButtons[i].onClick.AddListener(() => CycleCharacter(player, 1));
+                if (Has(joinButtons, i)) joinButtons[i].onClick.AddListener(() => ToggleJoin(player));
                 int pick = CharacterRoster.Load(i);
                 if (!seats[i].HasCharacter(pick)) pick = CharacterRoster.Fallback(i);
-                seats[i].SetCharacter(pick);
+                SetCharacter(i, pick);
             }
-            UpdateCharacterLabels();
+            for (int i = 0; i < stageCards.Length; i++)
+            {
+                int stage = i;
+                if (stageCards[i] != null && i < stageNames.Length) stageCards[i].onClick.AddListener(() => PickStage(stage));
+            }
+            if (playButton != null) playButton.onClick.AddListener(() => StartGame(playerCount));
+
+            if (settingsButton != null) settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
+            if (settingsCloseButton != null) settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));
+            if (musicButton != null) musicButton.onClick.AddListener(() => { GameSettings.MusicOn = !GameSettings.MusicOn; UpdateSettingsLabels(); });
+            if (soundButton != null) soundButton.onClick.AddListener(() => { GameSettings.SoundOn = !GameSettings.SoundOn; UpdateSettingsLabels(); });
+            if (settingsPanel != null) settingsPanel.SetActive(false);
+            UpdateSettingsLabels();
+            UpdateLobby();
         }
 
-        void ShowCharacters()
+        static bool Has<T>(T[] items, int i) where T : Object => items != null && i < items.Length && items[i] != null;
+
+        void SetCharacter(int player, int index)
         {
-            StopRoutine();
-            menuPanel.SetActive(false);
-            if (characterPanel != null) characterPanel.SetActive(true);
-            for (int i = 0; i < seats.Length; i++)
-            {
-                seats[i].gameObject.SetActive(true);
-                seats[i].SetAngle(ShowcaseAngles[i]);
-            }
-            if (cameraFollow != null) cameraFollow.closeUp = true;
+            seats[player].SetCharacter(index);
+            if (Has(lobbyAvatars, player)) lobbyAvatars[player].SetCharacter(index);
+            string name = seats[player].CharacterName;
+            if (Has(characterNames, player)) characterNames[player].text = name;
+            if (Has(nameTags, player)) nameTags[player].text = name;
+            if (Has(joysticks, player)) joysticks[player].SetLabel(name);
         }
 
         void CycleCharacter(int player, int direction)
@@ -177,21 +196,55 @@ namespace FartRaft
                 index = (index + direction + count) % count;
                 if (seat.HasCharacter(index)) break;
             }
-            seat.SetCharacter(index);
-            seat.Cheer();
+            SetCharacter(player, index);
             CharacterRoster.Save(player, index);
-            UpdateCharacterLabels();
+            if (Has(lobbyAvatars, player)) lobbyAvatars[player].Cheer();
         }
 
-        void UpdateCharacterLabels()
+        // Slots fill from the left: tapping an empty slot joins everyone up to it, tapping the last player removes them.
+        void ToggleJoin(int player)
+        {
+            int count;
+            if (player >= playerCount) count = player + 1;
+            else if (player > 0 && player == playerCount - 1) count = player;
+            else return;
+            bool joined = count > playerCount;
+            playerCount = count;
+            GameSettings.Players = count;
+            UpdateLobby();
+            if (joined && Has(lobbyAvatars, player)) lobbyAvatars[player].Cheer();
+        }
+
+        void UpdateLobby()
         {
             for (int i = 0; i < seats.Length; i++)
             {
-                string name = seats[i].CharacterName;
-                if (i < characterNames.Length && characterNames[i] != null) characterNames[i].text = name;
-                if (i < nameTags.Length && nameTags[i] != null) nameTags[i].text = name;
-                if (i < joysticks.Length && joysticks[i] != null) joysticks[i].SetLabel(name);
+                bool joined = i < playerCount;
+                if (Has(lobbyAvatars, i)) lobbyAvatars[i].gameObject.SetActive(joined);
+                if (Has(pickers, i)) pickers[i].SetActive(joined);
+                if (Has(joinedMarks, i)) joinedMarks[i].SetActive(joined);
+                if (Has(joinTexts, i)) joinTexts[i].text = joined ? (i == 0 ? "YOU" : "PLAYER " + (i + 1)) : "+ JOIN";
             }
+            for (int i = 0; i < stageCards.Length; i++)
+            {
+                if (stageCards[i] == null) continue;
+                if (Has(stageHighlights, i)) stageHighlights[i].SetActive(i == stageIndex);
+                stageCards[i].transform.localScale = Vector3.one * (i == stageIndex ? 1.06f : 1f);
+            }
+        }
+
+        void PickStage(int index)
+        {
+            if (index == stageIndex) return;
+            LoadStage(index, 0);
+        }
+
+        void UpdateSettingsLabels()
+        {
+            if (musicText != null) musicText.text = GameSettings.MusicOn ? "MUSIC: ON" : "MUSIC: OFF";
+            if (soundText != null) soundText.text = GameSettings.SoundOn ? "SOUND: ON" : "SOUND: OFF";
+            if (musicText != null) musicText.color = GameSettings.MusicOn ? new Color(0.45f, 1f, 0.45f) : new Color(1f, 0.45f, 0.35f);
+            if (soundText != null) soundText.color = GameSettings.SoundOn ? new Color(0.45f, 1f, 0.45f) : new Color(1f, 0.45f, 0.35f);
         }
 
         void ToggleDifficulty()
@@ -263,10 +316,11 @@ namespace FartRaft
             menuPanel.SetActive(true);
             hudPanel.SetActive(false);
             finishPanel.SetActive(false);
-            if (characterPanel != null) characterPanel.SetActive(false);
-            if (cameraFollow != null) cameraFollow.closeUp = false;
             ConfigureSeats();
             ResetRaft(startPoint);
+            UpdateLobby();
+            if (cameraFollow != null) cameraFollow.fixedView = lobbyView;
+            MusicPlayer.Instance.Play(lobbyMusic);
         }
 
         public void StartGame(int count)
@@ -277,9 +331,10 @@ namespace FartRaft
 
             menuPanel.SetActive(false);
             finishPanel.SetActive(false);
-            if (characterPanel != null) characterPanel.SetActive(false);
-            if (cameraFollow != null) cameraFollow.closeUp = false;
+            if (settingsPanel != null) settingsPanel.SetActive(false);
             hudPanel.SetActive(true);
+            if (cameraFollow != null) cameraFollow.fixedView = null;
+            MusicPlayer.Instance.Play(raceMusic);
 
             racing = false;
             dying = false;
@@ -378,6 +433,11 @@ namespace FartRaft
             }
 
             SetGhost(racing && !dying && Time.time - lastWarningTime < easySafeTime);
+
+            if (racing && coursePath != null && coursePath.Length > 1)
+            {
+                MusicPlayer.Instance.SetTempo((float)Mathf.Max(progressIndex, 0) / (coursePath.Length - 1) > 0.85f ? 1.08f : 1f);
+            }
 
             UpdateHud();
             syncText.enabled = syncActive;
@@ -510,6 +570,7 @@ namespace FartRaft
             racing = false;
             SetLocked(true);
             Audio.Cheer();
+            MusicPlayer.Instance.Stop();
             foreach (var seat in seats)
             {
                 if (seat.gameObject.activeSelf) seat.Cheer();

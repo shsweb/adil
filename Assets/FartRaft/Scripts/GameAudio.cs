@@ -44,7 +44,7 @@ namespace FartRaft
 
         void Play(AudioClip clip, float volume, float pitch)
         {
-            if (clip == null || source == null) return;
+            if (clip == null || source == null || !GameSettings.SoundOn) return;
             source.pitch = pitch;
             source.PlayOneShot(clip, volume);
         }
