@@ -141,7 +141,14 @@ namespace FartRaft
         static async Task SignIn()
         {
             if (UnityServices.State != ServicesInitializationState.Initialized)
-                await UnityServices.InitializeAsync();
+            {
+                var options = new InitializationOptions();
+#if UNITY_EDITOR
+                // Two editors on one Mac would sign in as the same player; give each its own profile.
+                options.SetProfile("editor" + System.Diagnostics.Process.GetCurrentProcess().Id);
+#endif
+                await UnityServices.InitializeAsync(options);
+            }
             if (!AuthenticationService.Instance.IsSignedIn)
                 await AuthenticationService.Instance.SignInAnonymouslyAsync();
         }
