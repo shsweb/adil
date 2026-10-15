@@ -29,6 +29,7 @@ namespace FartRaft
         bool welcomed;
         float sendTimer;
         float helloTimer;
+        float connectTime;
         string joinCode = "";
         int hostStage;
 
@@ -75,6 +76,8 @@ namespace FartRaft
         static OnlineRoom Room()
         {
             if (instance != null) return instance;
+            // Keep answering friends when this window or app is not in front (also needed for two editors on one Mac).
+            Application.runInBackground = true;
             var go = new GameObject("OnlineRoom");
             DontDestroyOnLoad(go);
             instance = go.AddComponent<OnlineRoom>();
@@ -129,6 +132,7 @@ namespace FartRaft
                 joinCode = code;
                 welcomed = false;
                 helloTimer = 0f;
+                connectTime = 0f;
                 manager.SetOnlineStatus("Connecting to the host...");
             }
             catch (Exception ex)
@@ -312,6 +316,10 @@ namespace FartRaft
 
             if (!welcomed)
             {
+                float before = connectTime;
+                connectTime += Time.unscaledDeltaTime;
+                if (before < 15f && connectTime >= 15f && game != null)
+                    game.SetOnlineStatus("Still connecting... Is the host's game open with the code on screen? If not, tap LEAVE and JOIN again.");
                 helloTimer += Time.deltaTime;
                 if (helloTimer > 0.5f)
                 {
