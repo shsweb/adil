@@ -46,9 +46,8 @@ one round inflatable raft, and fart it down floating water slides high above the
   - **SETTINGS**: mode Easy/Hard, music on/off, sound on/off.
 - **Music**: a happy lobby song and one song per stage (CC0, see `Audio/Music/CREDITS.txt`). It speeds up a little
   near the finish and stops when you cross the line.
-- The animated penguin is a free CC0 Gobkit model in `Characters/` (see `Characters/CREDITS.txt`) and needs the
-  **glTFast** package: *Window > Package Manager > + > Install package by name* > `com.unity.cloud.gltfast`.
-  Without it the penguin does not show up.
+- All five animals are built from simple shapes by the scene builder, so no extra packages are needed.
+  (`Characters/Penguin.glb` is not used: it imports as a solid pink blob.)
 
 ## Setup
 
@@ -57,7 +56,7 @@ one round inflatable raft, and fart it down floating water slides high above the
    `"com.unity.ugui": "2.0.0",` to the `dependencies` in `Packages/manifest.json` (use `1.0.0` on Unity 2022).
 2. Copy the `Assets/FartRaft` folder from this repo into your project's `Assets` folder.
 3. In Unity's top menu click **Fart Raft > 1. Configure Project For iOS and Android**.
-4. Click **Fart Raft > 2. Build Game Scene**. This generates all stages (course, raft, characters and UI) as `Assets/FartRaft/Scenes/Stage1.unity`, `Stage2.unity` and `Stage3.unity`, and adds them to the build.
+4. Click **Fart Raft > 2. Build Game Scene**. This generates all stages (course, raft, characters and UI) as `Assets/FartRaft/Scenes/Stage1.unity` to `Stage5.unity`, and adds them to the build.
 5. Press **Play**. Keyboard controls in the editor:
 
    | Player | Hold a direction (= joystick) |
@@ -130,3 +129,8 @@ Tuning values (thrust, gas, boost, obstacle speeds) are all editable in the Insp
 - More levels: duplicate the course code in `FartRaftBuilder.BuildCourse` with new waypoints.
 - Online multiplayer for phones: Unity **Netcode for GameObjects** with **Unity Relay + Lobby**
   (Unity Gaming Services), keeping the raft physics simulated only on the host.
+
+## License
+
+The code is under the MIT License (see `LICENSE`). Sounds, music and the penguin model are CC0;
+see the `CREDITS.txt` files in `Audio/`, `Audio/Music/` and `Characters/`.
