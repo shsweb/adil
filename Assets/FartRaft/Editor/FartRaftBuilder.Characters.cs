@@ -1,13 +1,12 @@
-using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
 namespace FartRaft.EditorTools
 {
-    // Playable characters. Classic animals and the penguin are built from shapes. The rest are
-    // animated animals from the Quirky Series - FREE Animals Pack (Asset Store, not in this repo);
-    // without that pack only the built animals are available.
+    // Playable characters. Gobkit animals (CC0, gobkit.itch.io) ship as .glb files in
+    // Assets/FartRaft/Characters and need the glTFast package; without it only the classic
+    // primitive animals are available.
     public static partial class FartRaftBuilder
     {
         const string CharactersFolder = Root + "/Characters";
@@ -37,11 +36,7 @@ namespace FartRaft.EditorTools
                     // A built penguin is black, white and orange, so the slot is never empty or pink.
                     BuildPenguin(root, m, out skin.leftArm, out skin.rightArm);
                 }
-                else if (info.prefab != null && SpawnPrefabCharacter(info.prefab, root, skin))
-                {
-                    models++;
-                }
-                else if (info.model != null && SpawnCharacterModel(info.model, root, skin))
+                else if (SpawnCharacterModel(info.model, root, skin))
                 {
                     models++;
                 }
@@ -57,12 +52,12 @@ namespace FartRaft.EditorTools
             if (loggedCharacters != models)
             {
                 loggedCharacters = models;
-                int wanted = CharacterRoster.All.Count(c => c.prefab != null);
+                int wanted = CharacterRoster.All.Count(c => c.classic < 0);
                 if (models < wanted)
-                    Debug.LogWarning($"[Fart Raft] Only {models} of {wanted} Quirky animals found. Import 'Quirky Series - FREE Animals Pack' " +
-                                     "(Window > Package Manager > My Assets) and rebuild.");
+                    Debug.LogWarning($"[Fart Raft] Only {models} of {wanted} character models loaded. Install the glTFast package " +
+                                     "(Package Manager > + > Install package by name > com.unity.cloud.gltfast) and rebuild.");
                 else
-                    Debug.Log($"[Fart Raft] {models} Quirky animals loaded as playable characters.");
+                    Debug.Log($"[Fart Raft] {models} character models loaded.");
             }
             return skins;
         }
@@ -74,66 +69,6 @@ namespace FartRaft.EditorTools
             if (asset == null) return false;
 
             var go = (GameObject)PrefabUtility.InstantiatePrefab(asset);
-            if (!FitCharacter(go, parent)) return false;
-
-            var animator = go.GetComponentInChildren<Animator>();
-            if (animator != null) animator.applyRootMotion = false;
-
-            skin.model = go;
-            skin.clips = AssetDatabase.LoadAllAssetsAtPath(path)
-                .OfType<AnimationClip>()
-                .Where(c => !c.name.StartsWith("__preview__"))
-                .ToArray();
-            return true;
-        }
-
-        static GameObject[] quirkyAnimals;
-
-        // A Quirky Series animal: same height as the built animals, playing its own Idle / Walk / Attack clips.
-        static bool SpawnPrefabCharacter(string animal, Transform parent, CharacterSkin skin)
-        {
-            if (quirkyAnimals == null)
-            {
-                quirkyAnimals = Prefabs("quirky series", "/prefabs/").Where(g =>
-                {
-                    string path = AssetDatabase.GetAssetPath(g).ToLowerInvariant();
-                    return !path.Contains("single lods") && !path.Contains("_scripts");
-                }).ToArray();
-            }
-            var prefab = Named(quirkyAnimals, animal).FirstOrDefault();
-            if (prefab == null) return false;
-
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
-            if (!FitCharacter(go, parent)) return false;
-
-            var animator = go.GetComponentInChildren<Animator>();
-            var clips = new List<AnimationClip>();
-            if (animator != null && animator.runtimeAnimatorController != null)
-                clips.AddRange(animator.runtimeAnimatorController.animationClips);
-            if (clips.Count == 0)
-            {
-                // No controller: read the clips from the model file the mesh comes from.
-                var smr = go.GetComponentInChildren<SkinnedMeshRenderer>();
-                string meshPath = smr != null && smr.sharedMesh != null ? AssetDatabase.GetAssetPath(smr.sharedMesh) : null;
-                if (!string.IsNullOrEmpty(meshPath))
-                    clips.AddRange(AssetDatabase.LoadAllAssetsAtPath(meshPath).OfType<AnimationClip>().Where(c => !c.name.StartsWith("__preview__")));
-            }
-
-            if (animator != null)
-            {
-                animator.applyRootMotion = false;
-                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-                // CharacterSkin plays the clips itself; the pack's controller would fight it.
-                if (clips.Count > 0) animator.runtimeAnimatorController = null;
-            }
-            skin.model = animator != null ? animator.gameObject : go;
-            skin.clips = clips.Where(c => c != null).Distinct().ToArray();
-            return true;
-        }
-
-        // Scales a model to the shared character size, feet at y = 0, centered on its parent.
-        static bool FitCharacter(GameObject go, Transform parent)
-        {
             go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
             foreach (var c in go.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
             foreach (var smr in go.GetComponentsInChildren<SkinnedMeshRenderer>(true)) smr.updateWhenOffscreen = true;
@@ -145,7 +80,7 @@ namespace FartRaft.EditorTools
                 return false;
             }
             // Reject the broken size (tiny mesh or a skeleton tens of metres tall). A sane import is fitted below.
-            if (bounds.size.y < 0.05f || bounds.size.y > 20f)
+            if (bounds.size.y < 0.3f || bounds.size.y > 20f)
             {
                 Object.DestroyImmediate(go);
                 return false;
@@ -154,6 +89,15 @@ namespace FartRaft.EditorTools
             go.transform.localScale *= s;
             go.transform.localPosition = new Vector3(-bounds.center.x * s, -bounds.min.y * s, -bounds.center.z * s);
             go.transform.SetParent(parent, false);
+
+            var animator = go.GetComponentInChildren<Animator>();
+            if (animator != null) animator.applyRootMotion = false;
+
+            skin.model = go;
+            skin.clips = AssetDatabase.LoadAllAssetsAtPath(path)
+                .OfType<AnimationClip>()
+                .Where(c => !c.name.StartsWith("__preview__"))
+                .ToArray();
             return true;
         }
 

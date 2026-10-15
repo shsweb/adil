@@ -40,8 +40,7 @@ one round inflatable raft, and fart it down floating water slides high above the
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
 - **Lobby** (like Fart Together): the animals stand in a row on a wooden deck in a jungle clearing, with a pool, floats and a little raft behind them.
   - **SOLO**, **2**, **3** and **4** pick how many people play on this phone. Tapping **+ JOIN** on an empty spot does the same, and tapping the last player's tag removes them. The choice is saved.
-  - **< >** under each animal picks the character (capy, penguin, croc, gorilla, hippo, and with the free
-    Quirky Series pack also monkey, deer, muskrat, gecko and birdy, which are the defaults). Each animal has its own fart pitch
+  - **< >** under each animal picks the character (capy, penguin, croc, gorilla, hippo). Each animal has its own fart pitch
     and fart cloud color, farts now and then while waiting and dances when picked. Picks are saved.
   - **CHOOSE STAGE** cards along the bottom show a map of each course, **PLAY!** bottom right.
   - **SETTINGS**: mode Easy/Hard, music on/off, sound on/off.
@@ -85,7 +84,7 @@ folders before copying the new ones (removed scripts would otherwise stay behind
   - [Beach Party & Fun Props Pack](https://assetstore.unity.com/packages/3d/props/exterior/beach-party-fun-props-pack-80918):
     umbrellas, chairs and sand castles on the Sunny cliffs, and the rolling beach ball.
   - [Quirky Series – FREE Animals Pack](https://assetstore.unity.com/packages/3d/characters/animals/quirky-series-free-animals-pack-178235):
-    playable animated animals (monkey, deer, muskrat, gecko, birdy), animals watching from the cliffs, and the jumping fish (herring).
+    animals watching from the cliffs, and the jumping fish (herring).
   - [Low Poly Tropical Island Lite](https://assetstore.unity.com/packages/3d/environments/low-poly-tropical-island-lite-242437):
     palm trees, plants and rocks on the cliffs and in the lobby, plus a pier, tent, chest and barrels by the pool.
   - [Low Poly Nature Pack Lite](https://svartskogen.itch.io/low-poly-nature-pack) (itch.io, free): trees, bushes, flowers and rocks.

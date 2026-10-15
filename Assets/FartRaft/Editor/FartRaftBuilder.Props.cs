@@ -34,7 +34,6 @@ namespace FartRaft.EditorTools
         static void ResetPropCaches()
         {
             prefabPaths = null;
-            quirkyAnimals = null;
             convertedMaterials.Clear();
             convertedCounter = 0;
             loggedCharacters = -1;
