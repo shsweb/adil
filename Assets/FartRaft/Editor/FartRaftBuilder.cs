@@ -117,6 +117,8 @@ namespace FartRaft.EditorTools
             OptimizeStatic(course);
 
             var raft = BuildRaft(m, startPoint, out FartSeat[] seats);
+            var rival = BuildRival(m, startPoint, out FartSeat[] rivalSeats, out RivalDriver rivalDriver);
+            var arena = BuildRumbleArena(m);
             var cameraFollow = BuildCamera(raft.transform, track.pos.ToArray());
             AddPostProcessing(cameraFollow.GetComponent<Camera>());
             ConfigureQuality();
@@ -125,6 +127,10 @@ namespace FartRaft.EditorTools
             var manager = managerGo.AddComponent<GameManager>();
             managerGo.AddComponent<KeyboardControls>().seats = seats;
             manager.raft = raft;
+            manager.rival = rival;
+            manager.rivalDriver = rivalDriver;
+            manager.rivalSeats = rivalSeats;
+            manager.arena = arena;
             manager.seats = seats;
             manager.startPoint = startPoint;
             manager.cameraFollow = cameraFollow;
@@ -1355,14 +1361,63 @@ namespace FartRaft.EditorTools
             var visual = new GameObject("Visual").transform;
             visual.SetParent(raftGo.transform, false);
             raft.visual = visual;
+            BuildBoat(visual, m, m.raftTube);
+            raft.wake = BuildWake(raftGo.transform, m.wakeRing);
 
-            // Only the boat is scaled; the animals keep their size.
+            seats = new FartSeat[4];
+            float[] defaultAngles = { 225f, 135f, 315f, 45f };
+            for (int i = 0; i < 4; i++)
+            {
+                seats[i] = BuildSeat(m, visual, raft, i);
+                seats[i].rimRadius = 2.1f * RaftScale;
+                seats[i].minGap = 40f;
+                seats[i].SetAngle(defaultAngles[i]);
+            }
+            return raft;
+        }
+
+        static Raft BuildRival(Mats m, Transform start, out FartSeat[] seats, out RivalDriver driver)
+        {
+            var raftGo = new GameObject("RivalRaft");
+            raftGo.transform.SetPositionAndRotation(start.position, start.rotation);
+            var body = raftGo.AddComponent<Rigidbody>();
+            body.mass = 40f;
+            var collider = raftGo.AddComponent<MeshCollider>();
+            collider.sharedMesh = CylinderMesh("RaftCollider", 2.55f * RaftScale, 0.9f, 16, true);
+            collider.convex = true;
+            SetSlippery(collider);
+            var raft = raftGo.AddComponent<Raft>();
+            raft.linearDrag = stage.drag;
+
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(raftGo.transform, false);
+            raft.visual = visual;
+            BuildBoat(visual, m, m.signYellow);
+            raft.wake = BuildWake(raftGo.transform, m.wakeRing);
+
+            seats = new FartSeat[2];
+            seats[0] = BuildSeat(m, visual, raft, 0, 2);
+            seats[1] = BuildSeat(m, visual, raft, 1, 3);
+            seats[0].rimRadius = 2.1f * RaftScale;
+            seats[1].rimRadius = 2.1f * RaftScale;
+            seats[0].SetAngle(160f);
+            seats[1].SetAngle(200f);
+
+            driver = raftGo.AddComponent<RivalDriver>();
+            driver.raft = raft;
+            driver.seats = seats;
+            raftGo.SetActive(false);
+            return raft;
+        }
+
+        static void BuildBoat(Transform visual, Mats m, Material tube)
+        {
             var boat = new GameObject("Boat").transform;
             boat.SetParent(visual, false);
             boat.localScale = new Vector3(RaftScale, 0.85f, RaftScale);
 
             var ring = TorusMesh("RaftRing", 2.1f, 0.45f, 28, 10);
-            MeshObject(ring, "Tube", boat, Vector3.zero, Vector3.one, m.raftTube);
+            MeshObject(ring, "Tube", boat, Vector3.zero, Vector3.one, tube);
             MeshObject(ring, "TubeBottom", boat, new Vector3(0f, -0.2f, 0f), new Vector3(1.01f, 0.6f, 1.01f), m.raftBand);
             MeshObject(CylinderMesh("RaftFloor", 1.8f, 0.14f, 20, false), "Floor", boat, new Vector3(0f, 0.02f, 0f), Vector3.one, m.raftFloor);
             for (float x = -1.35f; x <= 1.36f; x += 0.45f)
@@ -1380,22 +1435,32 @@ namespace FartRaft.EditorTools
                     new Vector3(Mathf.Sin(a) * 2.62f, 0.05f, Mathf.Cos(a) * 2.62f), Vector3.one, m.strap);
                 handle.transform.localRotation = Quaternion.Euler(0f, (45f + i * 90f), 90f);
             }
-
-            raft.wake = BuildWake(raftGo.transform, m.wakeRing);
-
-            seats = new FartSeat[4];
-            float[] defaultAngles = { 225f, 135f, 315f, 45f };
-            for (int i = 0; i < 4; i++)
-            {
-                seats[i] = BuildSeat(m, visual, raft, i);
-                seats[i].rimRadius = 2.1f * RaftScale;
-                seats[i].minGap = 40f;
-                seats[i].SetAngle(defaultAngles[i]);
-            }
-            return raft;
         }
 
-        static FartSeat BuildSeat(Mats m, Transform visual, Raft raft, int index)
+        static RumbleArena BuildRumbleArena(Mats m)
+        {
+            var root = new GameObject("RumbleArena").transform;
+            root.position = new Vector3(0f, 3f, -90f);
+            Prim(PrimitiveType.Cylinder, "Island", root, Vector3.zero, new Vector3(22f, 0.45f, 22f), m.raftFloor, true);
+            Prim(PrimitiveType.Cylinder, "Water", root, new Vector3(0f, -1.6f, 0f), new Vector3(40f, 0.15f, 40f), m.slideWater, false);
+
+            Transform Spawn(string name, float x)
+            {
+                var point = new GameObject(name).transform;
+                point.SetParent(root, false);
+                point.localPosition = new Vector3(x, 1.3f, 0f);
+                point.localRotation = Quaternion.LookRotation(new Vector3(-x, 0f, 0f));
+                return point;
+            }
+
+            var arena = root.gameObject.AddComponent<RumbleArena>();
+            arena.radius = 12.2f;
+            arena.spawnA = Spawn("SpawnA", -5.5f);
+            arena.spawnB = Spawn("SpawnB", 5.5f);
+            return arena;
+        }
+
+        static FartSeat BuildSeat(Mats m, Transform visual, Raft raft, int index, int prefer = -1)
         {
             var seatGo = new GameObject("Player" + (index + 1));
             seatGo.transform.SetParent(visual, false);
@@ -1403,7 +1468,7 @@ namespace FartRaft.EditorTools
             var character = new GameObject("Character").transform;
             character.SetParent(seatGo.transform, false);
             var skins = BuildSkins(character, m);
-            int pick = CharacterRoster.Default(index);
+            int pick = prefer >= 0 ? prefer : CharacterRoster.Default(index);
             if (skins[pick] == null) pick = CharacterRoster.Fallback(index);
             skins[pick].gameObject.SetActive(true);
 
@@ -1726,6 +1791,8 @@ namespace FartRaft.EditorTools
             manager.deathsText = Label(deathsBack, "Deaths", "DEATHS 0", 36, center, Vector2.zero, new Vector2(240f, 64f));
 
             manager.hudMenuButton = MakeButton(hud, "MenuButton", "MENU", top, new Vector2(280f, -78f), new Vector2(170f, 64f), new Color(0.25f, 0.3f, 0.38f, 0.75f), 32);
+            manager.placeText = Label(hud, "Place", "", 42, top, new Vector2(-280f, -78f), new Vector2(220f, 64f));
+            manager.placeText.color = new Color(1f, 0.85f, 0.25f);
             manager.syncText = Label(hud, "SyncBoost", "SYNC BOOST!", 60, top, new Vector2(0f, -160f), new Vector2(800f, 90f));
             manager.syncText.color = new Color(0.7f, 1f, 0.2f);
             manager.messageText = Label(hud, "Message", "", 110, center, new Vector2(0f, 140f), new Vector2(1400f, 160f));

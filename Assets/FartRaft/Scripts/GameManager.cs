@@ -7,6 +7,8 @@ namespace FartRaft
 {
     public enum Difficulty { Easy, Hard }
 
+    public enum PlayMode { Race, Team, Rumble }
+
     public class GameManager : MonoBehaviour
     {
         public static GameManager Instance { get; private set; }
@@ -19,6 +21,10 @@ namespace FartRaft
 
         [Header("Scene")]
         public Raft raft;
+        public Raft rival;
+        public RivalDriver rivalDriver;
+        public FartSeat[] rivalSeats = new FartSeat[0];
+        public RumbleArena arena;
         public FartSeat[] seats = new FartSeat[4];
         public FartJoystick[] joysticks = new FartJoystick[4];
         public Transform startPoint;
@@ -61,6 +67,8 @@ namespace FartRaft
         public Button[] stageCards = new Button[0];
         public GameObject[] stageHighlights = new GameObject[0];
         public Button[] countButtons = new Button[4];
+        public Button[] modeButtons = new Button[3];
+        public Text placeText;
         public Button playButton;
 
         [Header("Settings")]
@@ -105,8 +113,11 @@ namespace FartRaft
         static readonly float[] PowerPerPlayer = { 1f, 0.8f, 0.7f, 0.62f };
 
         int playerCount = 2;
+        PlayMode playMode = PlayMode.Race;
         bool racing;
         bool dying;
+        bool rivalDown;
+        float rivalBeansUntil = -100f;
         bool syncActive;
         float raceTime;
         int deaths;
@@ -165,6 +176,15 @@ namespace FartRaft
                 if (stageCards[i] != null && i < stageNames.Length) stageCards[i].onClick.AddListener(() => PickStage(stage));
             }
             if (playButton != null) playButton.onClick.AddListener(() => StartGame(playerCount));
+            playMode = GameSettings.Mode;
+            if (modeButtons != null)
+            {
+                for (int i = 0; i < modeButtons.Length; i++)
+                {
+                    int mode = i;
+                    if (modeButtons[i] != null) modeButtons[i].onClick.AddListener(() => SetPlayMode((PlayMode)mode));
+                }
+            }
             if (countButtons != null)
             {
                 for (int i = 0; i < countButtons.Length; i++)
@@ -258,9 +278,29 @@ namespace FartRaft
             for (int i = 0; i < stageCards.Length; i++)
             {
                 if (stageCards[i] == null) continue;
-                if (Has(stageHighlights, i)) stageHighlights[i].SetActive(i == stageIndex);
-                stageCards[i].transform.localScale = Vector3.one * (i == stageIndex ? 1.06f : 1f);
+                if (Has(stageHighlights, i)) stageHighlights[i].SetActive(i == stageIndex && playMode != PlayMode.Rumble);
+                stageCards[i].transform.localScale = Vector3.one * (i == stageIndex && playMode != PlayMode.Rumble ? 1.06f : 1f);
             }
+            if (modeButtons != null)
+            {
+                var selected = new Color(0.95f, 0.55f, 0.15f);
+                var idle = new Color(0.22f, 0.24f, 0.34f, 0.96f);
+                for (int i = 0; i < modeButtons.Length; i++)
+                {
+                    if (modeButtons[i] == null) continue;
+                    bool on = (int)playMode == i;
+                    var image = modeButtons[i].GetComponent<Image>();
+                    if (image != null) image.color = on ? selected : idle;
+                    modeButtons[i].transform.localScale = Vector3.one * (on ? 1.06f : 1f);
+                }
+            }
+        }
+
+        void SetPlayMode(PlayMode mode)
+        {
+            playMode = mode;
+            GameSettings.Mode = mode;
+            UpdateLobby();
         }
 
         void PickStage(int index)
@@ -302,6 +342,28 @@ namespace FartRaft
                 seat.startKick = 0.8f;
                 seat.instantAim = easy;
                 seat.drainPerSecond = easy ? 12f : 22f;
+            }
+
+            if (rival != null)
+            {
+                rival.linearDrag = raft.linearDrag;
+                rival.quadraticDrag = raft.quadraticDrag;
+                rival.autoForward = raft.autoForward;
+                rival.maxSpeed = raft.maxSpeed;
+                rival.lockYaw = raft.lockYaw;
+                rival.sideDrag = raft.sideDrag;
+            }
+            if (rivalSeats != null)
+            {
+                foreach (var seat in rivalSeats)
+                {
+                    if (seat == null) continue;
+                    seat.thrust = easy ? 9f : 3f;
+                    seat.startKick = 0.8f;
+                    seat.instantAim = easy;
+                    seat.drainPerSecond = easy ? 8f : 16f;
+                    seat.thrustScale = 0.5f;
+                }
             }
 
             ObstacleSpeed = easy ? 0.6f : 1f;
@@ -347,9 +409,14 @@ namespace FartRaft
             hudPanel.SetActive(false);
             finishPanel.SetActive(false);
             ConfigureSeats();
+            HideRival();
             ResetRaft(startPoint);
             UpdateLobby();
-            if (cameraFollow != null) cameraFollow.fixedView = lobbyView;
+            if (cameraFollow != null)
+            {
+                cameraFollow.arenaView = false;
+                cameraFollow.fixedView = lobbyView;
+            }
             MusicPlayer.Instance.Play(lobbyMusic);
         }
 
@@ -368,16 +435,27 @@ namespace FartRaft
 
             racing = false;
             dying = false;
+            rivalDown = false;
             raceTime = 0f;
             deaths = 0;
             nextCheckpoint = 0;
             lastWarningTime = -100f;
             beansUntil = -100f;
+            rivalBeansUntil = -100f;
             respawnPoint = startPoint;
             SetFlash(0f);
+            ApplyDifficulty();
+            PrepareMatch();
             SetLocked(true);
-            ResetRaft(startPoint);
             UpdateHud();
+            if (hintText != null)
+            {
+                hintText.text = playMode == PlayMode.Rumble
+                    ? "Push the yellow raft off the island."
+                    : playMode == PlayMode.Team
+                        ? "The yellow raft is the other team. Beat it to the finish. Pull back to wait."
+                        : "Push the stick where the raft should go. Pull it back to wait.";
+            }
             routine = StartCoroutine(Countdown());
         }
 
@@ -388,9 +466,10 @@ namespace FartRaft
                 ShowMessage(i.ToString(), 1.1f);
                 yield return new WaitForSeconds(0.8f);
             }
-            ShowMessage("FART!", 1f);
+            ShowMessage(playMode == PlayMode.Rumble ? "SHOVE!" : "FART!", 1f);
             SetLocked(false);
             racing = true;
+            if (rivalDriver != null && rival != null && rival.gameObject.activeSelf) rivalDriver.racing = true;
             routine = null;
         }
 
@@ -417,10 +496,89 @@ namespace FartRaft
             }
         }
 
-        void SetLocked(bool locked)
+        void SetLocked(bool locked, bool everyone = true)
         {
             foreach (var seat in seats) seat.locked = locked;
             raft.SetFrozen(locked);
+            if (!everyone || rival == null || !rival.gameObject.activeSelf) return;
+            rival.SetFrozen(locked);
+            if (rivalSeats == null) return;
+            foreach (var seat in rivalSeats)
+            {
+                if (seat != null) seat.locked = locked;
+            }
+        }
+
+        void HideRival()
+        {
+            if (rivalDriver != null) rivalDriver.racing = false;
+            if (rival != null) rival.gameObject.SetActive(false);
+        }
+
+        void PrepareMatch()
+        {
+            playMode = GameSettings.Mode;
+            bool versus = playMode != PlayMode.Race && rival != null && arena != null;
+            if (cameraFollow != null)
+            {
+                cameraFollow.arenaView = playMode == PlayMode.Rumble;
+                cameraFollow.secondTarget = versus ? rival.transform : null;
+            }
+            if (!versus || playMode == PlayMode.Race)
+            {
+                HideRival();
+                ResetRaft(startPoint);
+                return;
+            }
+
+            rival.gameObject.SetActive(true);
+            if (rivalDriver != null)
+            {
+                rivalDriver.racing = false;
+                rivalDriver.mode = playMode;
+                rivalDriver.path = coursePath;
+                rivalDriver.player = raft.transform;
+                rivalDriver.arena = arena;
+                rivalDriver.urgency = 1f;
+                rivalDriver.ResetProgress();
+            }
+            if (rivalSeats != null)
+            {
+                foreach (var seat in rivalSeats)
+                {
+                    if (seat == null) continue;
+                    seat.gameObject.SetActive(true);
+                    seat.ResetGas();
+                }
+            }
+
+            if (playMode == PlayMode.Rumble)
+            {
+                raft.autoForward = 0f;
+                raft.lockYaw = false;
+                rival.autoForward = 0f;
+                rival.lockYaw = false;
+                rival.holdBack = 0f;
+                raft.Respawn(arena.spawnA.position, arena.spawnA.rotation);
+                rival.Respawn(arena.spawnB.position, arena.spawnB.rotation);
+                if (rivalDriver != null)
+                {
+                    rivalDriver.RespawnPosition = arena.spawnB.position;
+                    rivalDriver.RespawnRotation = arena.spawnB.rotation;
+                }
+            }
+            else
+            {
+                Vector3 side = startPoint.right * 3.4f;
+                ResetRaft(startPoint);
+                rival.Respawn(startPoint.position + side, startPoint.rotation);
+                if (rivalDriver != null)
+                {
+                    rivalDriver.RespawnPosition = startPoint.position + side;
+                    rivalDriver.RespawnRotation = startPoint.rotation;
+                }
+            }
+            if (cameraFollow != null) cameraFollow.Snap();
         }
 
         void ResetRaft(Transform point)
@@ -457,6 +615,14 @@ namespace FartRaft
             }
             raft.holdBack = active > 0 ? braking / active : 0f;
 
+            if (playMode == PlayMode.Team && rival != null && rival.gameObject.activeSelf && rivalDriver != null && coursePath != null && coursePath.Length > 1)
+            {
+                rival.TrackForward = CoursePath.FlatDirection(coursePath, Mathf.Max(rivalDriver.Progress, 0), 6);
+                int gap = progressIndex - rivalDriver.Progress;
+                rivalDriver.urgency = 1f + Mathf.Clamp(gap / 25f, -0.35f, 0.45f);
+                float beans = racing && Time.time < rivalBeansUntil ? beansBoost : 1f;
+                rivalDriver.urgency *= beans;
+            }
         }
 
         void Update()
@@ -464,10 +630,21 @@ namespace FartRaft
             if (racing) raceTime += Time.deltaTime;
 
             UpdateProgress();
-            if (racing && !dying && coursePath != null && coursePath.Length > 0 &&
-                raft.transform.position.y < coursePath[progressIndex].y - fallDepth)
+            if (racing && !dying && playMode != PlayMode.Rumble && coursePath != null && coursePath.Length > 0 &&
+                raft.transform.position.y < coursePath[Mathf.Max(progressIndex, 0)].y - fallDepth)
             {
                 routine = StartCoroutine(Die(raft.transform.position, true));
+            }
+            if (racing && playMode == PlayMode.Team && !rivalDown && rival != null && rival.gameObject.activeSelf &&
+                coursePath != null && coursePath.Length > 0 && rivalDriver != null &&
+                rival.transform.position.y < coursePath[Mathf.Max(rivalDriver.Progress, 0)].y - fallDepth)
+            {
+                StartCoroutine(RivalFell());
+            }
+            if (racing && playMode == PlayMode.Rumble && arena != null && !dying)
+            {
+                if (arena.IsOff(raft.transform.position)) routine = StartCoroutine(EndRumble(false));
+                else if (rival != null && arena.IsOff(rival.transform.position)) routine = StartCoroutine(EndRumble(true));
             }
 
             SetGhost(racing && !dying && Time.time - lastWarningTime < easySafeTime);
@@ -496,9 +673,15 @@ namespace FartRaft
             Physics.IgnoreLayerCollision(raft.gameObject.layer, Hazard.Layer, false);
         }
 
-        public void OnHazard(Vector3 point)
+        public void OnHazard(Raft who, Vector3 point)
         {
-            if (!racing || dying) return;
+            if (!racing) return;
+            if (who == rival)
+            {
+                if (!rivalDown) RivalHazard(point);
+                return;
+            }
+            if (dying) return;
 
             if (difficulty == Difficulty.Easy)
             {
@@ -535,7 +718,7 @@ namespace FartRaft
                 Audio.Crash();
                 PlayImpact(point, 40);
                 ShowMessage("SPLAT!", 1.5f);
-                SetLocked(true);
+                SetLocked(true, false);
                 yield return new WaitForSeconds(0.6f);
             }
 
@@ -545,7 +728,7 @@ namespace FartRaft
                 yield return null;
             }
             SetFlash(1f);
-            SetLocked(true);
+            SetLocked(true, false);
             ResetRaft(respawnPoint);
             yield return new WaitForSeconds(0.2f);
 
@@ -556,7 +739,7 @@ namespace FartRaft
             }
             SetFlash(0f);
 
-            SetLocked(false);
+            SetLocked(false, false);
             ShowMessage("GO!", 0.7f);
             dying = false;
             routine = null;
@@ -576,9 +759,17 @@ namespace FartRaft
             impactEffect.Emit(count);
         }
 
-        public bool OnBeans(Vector3 position)
+        public bool OnBeans(Raft who, Vector3 position)
         {
-            if (!racing || dying) return false;
+            if (!racing) return false;
+            if (who == rival)
+            {
+                rivalBeansUntil = Time.time + beansTime;
+                if (rivalSeats != null) foreach (var seat in rivalSeats) if (seat != null) seat.ResetGas();
+                PlayImpact(position, 12);
+                return true;
+            }
+            if (dying) return false;
             beansUntil = Time.time + beansTime;
             foreach (var seat in seats) seat.ResetGas();
             PlayImpact(position, 12);
@@ -587,25 +778,51 @@ namespace FartRaft
             return true;
         }
 
-        public void OnCheckpoint(Checkpoint checkpoint)
+        public void OnCheckpoint(Checkpoint checkpoint, Raft who)
         {
-            if (!racing || dying || checkpoint.index != nextCheckpoint) return;
+            if (!racing) return;
+            if (who == rival)
+            {
+                if (rivalDriver != null && checkpoint.index == rivalDriver.Checkpoints)
+                {
+                    rivalDriver.NoteCheckpoint(checkpoint.index);
+                    rivalDriver.RespawnPosition = checkpoint.transform.position + checkpoint.transform.right * 2.8f;
+                    rivalDriver.RespawnRotation = checkpoint.transform.rotation;
+                }
+                return;
+            }
+            if (dying || checkpoint.index != nextCheckpoint) return;
             nextCheckpoint++;
             respawnPoint = checkpoint.transform;
             Audio.Checkpoint();
             ShowMessage("CHECKPOINT!", 1.2f);
         }
 
-        public void OnFinish()
+        public void OnFinish(Raft who)
         {
-            if (!racing || dying) return;
+            if (!racing || playMode == PlayMode.Rumble) return;
+            if (who == rival)
+            {
+                if (rivalDriver == null || rivalDriver.Checkpoints < checkpointCount) return;
+                FinishMatch(false);
+                return;
+            }
+            if (dying) return;
             if (nextCheckpoint < checkpointCount)
             {
                 ShowMessage("You missed a checkpoint!", 1.5f);
                 return;
             }
 
+            FinishMatch(true);
+        }
+
+        void FinishMatch(bool playerWon)
+        {
+            StopRoutine();
             racing = false;
+            dying = true;
+            if (rivalDriver != null) rivalDriver.racing = false;
             SetLocked(true);
             Audio.Cheer();
             MusicPlayer.Instance.Stop();
@@ -616,7 +833,7 @@ namespace FartRaft
 
             string key = "best_v3_" + StageSceneName(stageIndex) + "_" + difficulty + "_" + playerCount;
             float best = PlayerPrefs.GetFloat(key, float.MaxValue);
-            bool record = raceTime < best;
+            bool record = playerWon && raceTime < best;
             if (record)
             {
                 best = raceTime;
@@ -624,9 +841,13 @@ namespace FartRaft
                 PlayerPrefs.Save();
             }
 
-            finishText.text = (HasNextStage ? "STAGE " + (stageIndex + 1) + " DONE!" : "YOU BEAT ALL STAGES!") +
-                              "\nTime " + FormatTime(raceTime) + "   Deaths " + deaths + "\n" +
-                              (record ? "NEW BEST!" : "Best " + FormatTime(best));
+            string headline = playMode == PlayMode.Team
+                ? (playerWon ? "YOU WON THE TEAM RACE!" : "THE YELLOW RAFT WON!")
+                : (HasNextStage ? "STAGE " + (stageIndex + 1) + " DONE!" : "YOU BEAT ALL STAGES!");
+            string bestLine = record ? "NEW BEST!" : (best < 100000f ? "Best " + FormatTime(best) : "");
+            finishText.text = headline +
+                              "\nTime " + FormatTime(raceTime) + "   Deaths " + deaths +
+                              (bestLine.Length > 0 ? "\n" + bestLine : "");
             if (nextStageButton != null) nextStageButton.gameObject.SetActive(HasNextStage);
             finishPanel.SetActive(true);
         }
@@ -648,10 +869,66 @@ namespace FartRaft
         {
             timerText.text = FormatTime(raceTime);
             if (deathsText != null) deathsText.text = "DEATHS " + deaths;
-            if (progressFill != null && coursePath != null && coursePath.Length > 1)
+            if (progressFill != null && coursePath != null && coursePath.Length > 1 && playMode != PlayMode.Rumble)
             {
                 progressFill.fillAmount = (float)Mathf.Max(progressIndex, 0) / (coursePath.Length - 1);
             }
+            if (placeText != null)
+            {
+                if (!racing || playMode == PlayMode.Race || rivalDriver == null)
+                {
+                    placeText.text = "";
+                }
+                else if (playMode == PlayMode.Rumble)
+                {
+                    placeText.text = "KNOCK THEM OFF";
+                }
+                else
+                {
+                    bool ahead = progressIndex >= rivalDriver.Progress;
+                    placeText.text = ahead ? "1ST" : "2ND";
+                }
+            }
+        }
+
+        void RivalHazard(Vector3 point)
+        {
+            if (rival == null) return;
+            rival.Bounce(point, easyHitBounce);
+            PlayImpact(point, 12);
+            if (difficulty == Difficulty.Hard) StartCoroutine(RivalFell());
+        }
+
+        IEnumerator RivalFell()
+        {
+            if (rivalDown || !racing || rival == null || rivalDriver == null) yield break;
+            rivalDown = true;
+            rival.SetFrozen(true);
+            if (rivalSeats != null) foreach (var seat in rivalSeats) if (seat != null) seat.locked = true;
+            ShowMessage("THEY FELL!", 1f);
+            yield return new WaitForSeconds(0.7f);
+            if (!racing || rival == null) yield break;
+            rival.Respawn(rivalDriver.RespawnPosition, rivalDriver.RespawnRotation);
+            rival.SetFrozen(!racing);
+            if (rivalSeats != null) foreach (var seat in rivalSeats) if (seat != null) seat.locked = !racing;
+            rivalDown = false;
+        }
+
+        IEnumerator EndRumble(bool playerWon)
+        {
+            if (!racing) yield break;
+            racing = false;
+            dying = true;
+            if (rivalDriver != null) rivalDriver.racing = false;
+            SetLocked(true);
+            if (playerWon) Audio.Cheer();
+            else Audio.Fall();
+            ShowMessage(playerWon ? "YOU KNOCKED THEM OFF!" : "THEY KNOCKED YOU OFF!", 1.6f);
+            yield return new WaitForSeconds(1.2f);
+            finishText.text = playerWon ? "YOU WON RAFT RUMBLE!" : "THE YELLOW RAFT WON RAFT RUMBLE!";
+            if (nextStageButton != null) nextStageButton.gameObject.SetActive(false);
+            finishPanel.SetActive(true);
+            routine = null;
         }
 
         static string FormatTime(float seconds)

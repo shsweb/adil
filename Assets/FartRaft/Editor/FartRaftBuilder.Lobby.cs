@@ -337,7 +337,17 @@ namespace FartRaft.EditorTools
                 highlight.gameObject.SetActive(k == 0);
             }
 
-            manager.playButton = MakeButton(lobby, "Play", "PLAY!", new Vector2(1f, 0f), new Vector2(-220f, 140f), new Vector2(360f, 200f), new Color(0.35f, 0.8f, 0.25f), 86);
+            manager.playButton = MakeButton(lobby, "Play", "PLAY!", new Vector2(1f, 0f), new Vector2(-210f, 100f), new Vector2(340f, 140f), new Color(0.35f, 0.8f, 0.25f), 64);
+            string[] modeLabels = { "RACE", "TEAM", "RUMBLE" };
+            manager.modeButtons = new Button[3];
+            for (int i = 0; i < 3; i++)
+            {
+                var button = MakeButton(lobby, "Mode" + i, modeLabels[i], new Vector2(1f, 0f),
+                    new Vector2(-210f, 250f + i * 86f), new Vector2(340f, 74f), new Color(0.22f, 0.24f, 0.34f, 0.96f), 36);
+                var label = button.GetComponentInChildren<Text>();
+                if (label != null) FitText(label, 22, 36);
+                manager.modeButtons[i] = button;
+            }
 
             // SOLO / 2 / 3 / 4, on the same row as CHOOSE STAGE.
             string[] countLabels = { "SOLO", "2", "3", "4" };
@@ -393,8 +403,8 @@ namespace FartRaft.EditorTools
             manager.musicText = manager.musicButton.GetComponentInChildren<Text>();
             manager.soundButton = MakeButton(box, "Sound", "SOUND: ON", center, new Vector2(0f, -140f), new Vector2(600f, 110f), button, 46);
             manager.soundText = manager.soundButton.GetComponentInChildren<Text>();
-            Label(box, "ModeHint", "EASY = raft goes by itself.  HARD = like the real game.", 26, center, new Vector2(0f, -215f), new Vector2(760f, 40f));
-            manager.settingsCloseButton = MakeButton(box, "Close", "CLOSE", center, new Vector2(0f, -285f), new Vector2(360f, 100f), PlayerColors[2], 46);
+            Label(box, "ModeHint", "EASY = the raft goes by itself. HARD = like the real game. RACE is you alone. TEAM races a yellow raft. RUMBLE knocks it off an island.", 24, center, new Vector2(0f, -210f), new Vector2(760f, 70f));
+            manager.settingsCloseButton = MakeButton(box, "Close", "CLOSE", center, new Vector2(0f, -300f), new Vector2(360f, 90f), PlayerColors[2], 42);
             panel.gameObject.SetActive(false);
         }
 

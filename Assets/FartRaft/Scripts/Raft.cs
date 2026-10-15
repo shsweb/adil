@@ -166,7 +166,15 @@ namespace FartRaft
 
             if (collision.collider.GetComponentInParent<Hazard>() != null)
             {
-                if (manager != null) manager.OnHazard(point);
+                if (manager != null) manager.OnHazard(this, point);
+                return;
+            }
+
+            var otherRaft = collision.collider.GetComponentInParent<Raft>();
+            if (otherRaft != null && otherRaft != this)
+            {
+                Bounce(point, 3f);
+                if (manager != null) manager.Audio.Bump(collision.relativeVelocity.magnitude);
                 return;
             }
 

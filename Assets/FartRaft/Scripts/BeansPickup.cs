@@ -28,8 +28,9 @@ namespace FartRaft
 
         void OnTriggerEnter(Collider other)
         {
-            if (!Raft.IsRaft(other) || GameManager.Instance == null) return;
-            if (!GameManager.Instance.OnBeans(transform.position)) return;
+            var raft = other.attachedRigidbody != null ? other.attachedRigidbody.GetComponent<Raft>() : null;
+            if (raft == null || GameManager.Instance == null) return;
+            if (!GameManager.Instance.OnBeans(raft, transform.position)) return;
             hiddenUntil = Time.time + respawnTime;
         }
     }

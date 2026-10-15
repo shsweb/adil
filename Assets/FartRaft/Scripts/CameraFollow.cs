@@ -16,6 +16,9 @@ namespace FartRaft
         public float rotationSmoothing = 2.5f;
         [Tooltip("While set (lobby), the camera sits still at this spot instead of following the raft.")]
         public Transform fixedView;
+        [Tooltip("Raft Rumble: look down at both rafts instead of along the slide.")]
+        public bool arenaView;
+        public Transform secondTarget;
 
         float yaw;
         int pathIndex = -1;
@@ -28,6 +31,15 @@ namespace FartRaft
                 return;
             }
             if (target == null) return;
+
+            if (arenaView)
+            {
+                Vector3 mid = secondTarget != null ? (target.position + secondTarget.position) * 0.5f : target.position;
+                Vector3 overhead = mid + new Vector3(0f, 18f, -14f);
+                transform.position = Vector3.Lerp(transform.position, overhead, 1f - Mathf.Exp(-positionSmoothing * Time.deltaTime));
+                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(mid - transform.position), 1f - Mathf.Exp(-rotationSmoothing * Time.deltaTime));
+                return;
+            }
 
             float dt = Time.deltaTime;
             yaw = Mathf.LerpAngle(yaw, TargetYaw(), 1f - Mathf.Exp(-rotationSmoothing * dt));
@@ -49,6 +61,13 @@ namespace FartRaft
         public void Snap()
         {
             if (target == null) return;
+            if (arenaView)
+            {
+                Vector3 mid = secondTarget != null ? (target.position + secondTarget.position) * 0.5f : target.position;
+                transform.position = mid + new Vector3(0f, 18f, -14f);
+                transform.LookAt(mid);
+                return;
+            }
             pathIndex = -1;
             yaw = TargetYaw();
             Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);

@@ -8,6 +8,7 @@ namespace FartRaft
         const string MusicKey = "music_on";
         const string SoundKey = "sound_on";
         const string PlayersKey = "players";
+        const string ModeKey = "play_mode";
 
         public static bool MusicOn
         {
@@ -25,6 +26,12 @@ namespace FartRaft
         {
             get => Mathf.Clamp(PlayerPrefs.GetInt(PlayersKey, 2), 1, 4);
             set { PlayerPrefs.SetInt(PlayersKey, Mathf.Clamp(value, 1, 4)); PlayerPrefs.Save(); }
+        }
+
+        public static PlayMode Mode
+        {
+            get => (PlayMode)Mathf.Clamp(PlayerPrefs.GetInt(ModeKey, 0), 0, 2);
+            set { PlayerPrefs.SetInt(ModeKey, (int)value); PlayerPrefs.Save(); }
         }
     }
 }

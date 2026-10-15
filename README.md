@@ -17,6 +17,10 @@ one round inflatable raft, and fart it down floating water slides high above the
 - Grab a floating **BEANS** can for 4 seconds of **MEGA FART** (much stronger farts and a full gas tank).
 - When **everyone farts at the same time** you get a **SYNC BOOST**.
 - Each fart drains your gas ring. If it empties, you're out until it refills.
+- **RACE**, **TEAM**, and **RUMBLE** sit above PLAY.
+  - **RACE**: your raft only.
+  - **TEAM**: a yellow raft, driven by the game, races the same course. First to the finish wins.
+  - **RUMBLE**: both rafts start on a round island. Push the yellow one off. If you fall off, you lose.
 - **5 stages**, picked with the stage cards in the lobby. Each card shows a little map of that course. **NEXT STAGE** on the finish screen goes to the next one:
   1. **Sunny Slides**: 4 slides and 4 pools, 7 checkpoints. Warm-up.
   2. **Jungle Rapids**: longer, with sliding blocks, more buoys and spinners. 6 checkpoints.
@@ -24,7 +28,8 @@ one round inflatable raft, and fart it down floating water slides high above the
   4. **Ice World**: a slippery course. The raft keeps sliding after you let go.
   5. **Sewer Splash**: a murky green course.
   Every course has a yellow **jump ramp**. Go fast and the raft hops. Pull the joystick back to slow down and wait.
-- Your best time is saved per stage, mode and player count.
+- Your best time is saved on this phone, per stage, difficulty and player count. A shared online board needs the same Unity room setup as friends, so it is not in the game yet.
+- Online friends (two phones, one code) is not in this build. It needs Unity Lobby and Relay turned on for the project first.
 - **Difficulty** (**SETTINGS > MODE** in the lobby, the choice is remembered):
   - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer. Pull the joystick back to slow down and wait.
     Animals jump to the right spot instantly, farts are stronger, gas lasts longer, obstacles move slower

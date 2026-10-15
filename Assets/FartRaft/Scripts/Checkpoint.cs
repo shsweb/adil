@@ -8,7 +8,8 @@ namespace FartRaft
 
         void OnTriggerEnter(Collider other)
         {
-            if (Raft.IsRaft(other) && GameManager.Instance != null) GameManager.Instance.OnCheckpoint(this);
+            var raft = other.attachedRigidbody != null ? other.attachedRigidbody.GetComponent<Raft>() : null;
+            if (raft != null && GameManager.Instance != null) GameManager.Instance.OnCheckpoint(this, raft);
         }
     }
 }
