@@ -252,6 +252,21 @@ namespace FartRaft
             if (game == null) game = GameManager.Instance;
             if (!driver.IsCreated) return;
             driver.ScheduleUpdate().Complete();
+            // Relay drops a room that went quiet (for example a paused window). Close it and say so,
+            // instead of showing a dead code.
+            if (driver.GetRelayConnectionStatus() == RelayConnectionStatus.AllocationInvalid)
+            {
+                bool wasHost = Hosting;
+                Shutdown();
+                if (game != null)
+                {
+                    game.SetOnlineCode("");
+                    game.SetOnlineStatus(wasHost
+                        ? "The room closed because it was quiet too long. Tap HOST for a new code."
+                        : "Lost the room. Ask the host for a new code and tap JOIN.");
+                }
+                return;
+            }
             if (Hosting) UpdateHost();
             else if (Joined) UpdateClient();
         }
