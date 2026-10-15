@@ -1,0 +1,4 @@
+Penguin model: Gobkit Free Bird Pack (https://gobkit.com, https://gobkit.itch.io)
+License: CC0 1.0 (public domain) - free for any use, no attribution required.
+
+The .glb file needs the glTFast package (com.unity.cloud.gltfast) to import.
