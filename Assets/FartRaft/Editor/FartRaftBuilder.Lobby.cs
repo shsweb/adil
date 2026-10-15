@@ -22,42 +22,116 @@ namespace FartRaft.EditorTools
             var root = new GameObject("Lobby").transform;
             root.position = LobbyOrigin;
 
-            var ground = Lit(stagePrefix + "LobbyGround", Color.Lerp(stage.grass, new Color(0.93f, 0.78f, 0.52f), 0.55f), 0.05f);
-            var wall = Lit(stagePrefix + "LobbyWall", Color.Lerp(stage.coral, stage.slideBody, 0.35f), 0.05f);
-            var wallDark = Lit(stagePrefix + "LobbyWallDark", Color.Lerp(stage.coral, Color.black, 0.25f), 0.05f);
+            // Feet stay at y = 0 so the name tags and pickers land in the same screen spots.
+            // The pool sits a step below the wooden deck.
+            const float grassTop = -0.42f;
+            const float sandTop = -0.06f;
+            const float waterTop = -0.14f;
 
-            var floor = Prim(PrimitiveType.Cylinder, "Ground", root, Vector3.down * 0.5f, new Vector3(60f, 0.5f, 60f), ground, false);
+            var grass = Lit(stagePrefix + "LobbyGrass", stage.grass, 0.04f);
+            var sand = Lit(stagePrefix + "LobbySand", new Color(0.90f, 0.78f, 0.48f), 0.04f);
+            var pool = LobbyPoolMaterial(m);
+
+            var floor = Prim(PrimitiveType.Cylinder, "Ground", root, new Vector3(0f, grassTop - 0.5f, 0f), new Vector3(90f, 0.5f, 90f), grass, false);
             NoShadows(floor);
-
-            // Canyon walls in an arc behind the animals.
-            for (int i = 0; i < 15; i++)
+            Prim(PrimitiveType.Cube, "Sand", root, new Vector3(0f, sandTop - 0.15f, 7.2f), new Vector3(22f, 0.3f, 16f), sand, false);
+            Prim(PrimitiveType.Cube, "Deck", root, new Vector3(0f, -0.21f, -0.2f), new Vector3(13.4f, 0.42f, 5.1f), m.wood, false);
+            for (float z = -1.8f; z <= 1.61f; z += 0.55f)
             {
-                float a = Mathf.Lerp(-80f, 80f, i / 14f) * Mathf.Deg2Rad;
-                float radius = 13f + R(random) * 3f;
-                float h = 9f + R(random) * 7f;
-                var block = Prim(PrimitiveType.Cube, "Wall", root, new Vector3(Mathf.Sin(a) * radius, h * 0.5f - 0.5f, Mathf.Cos(a) * radius),
-                    new Vector3(6.5f + R(random) * 2f, h, 3f + R(random) * 2f), i % 3 == 0 ? wallDark : wall, false);
-                block.transform.localRotation = Quaternion.Euler(R(random) * 6f - 3f, a * Mathf.Rad2Deg + R(random) * 16f - 8f, R(random) * 6f - 3f);
+                Prim(PrimitiveType.Cube, "Plank", root, new Vector3(0f, 0.012f, z), new Vector3(12.6f, 0.02f, 0.05f), m.darkWood, false);
             }
 
-            // Plants and rocks around the edges, kept away from the middle so they never hide an animal.
-            for (int i = 0; i < 26; i++)
+            var water = Prim(PrimitiveType.Cube, "Pool", root, new Vector3(0f, waterTop - 0.04f, 6.85f), new Vector3(12.2f, 0.08f, 8.2f), pool, false);
+            water.AddComponent<UVScroll>().speed = new Vector2(0.02f, -0.06f);
+            Prim(PrimitiveType.Cube, "RimFront", root, new Vector3(0f, -0.15f, 2.52f), new Vector3(13.4f, 0.3f, 0.42f), m.wood, false);
+            Prim(PrimitiveType.Cube, "RimLeft", root, new Vector3(-6.55f, -0.14f, 6.85f), new Vector3(0.5f, 0.34f, 8.8f), m.darkWood, false);
+            Prim(PrimitiveType.Cube, "RimRight", root, new Vector3(6.55f, -0.14f, 6.85f), new Vector3(0.5f, 0.34f, 8.8f), m.darkWood, false);
+            Prim(PrimitiveType.Cube, "RimBack", root, new Vector3(0f, -0.14f, 11.25f), new Vector3(13.6f, 0.34f, 0.55f), m.darkWood, false);
+
+            var tropical = TropicalPrefabs();
+            var palms = Named(tropical, "palm");
+            var trees = palms.Length > 0 ? palms : props.trees;
+            var plants = Named(tropical, "plant");
+            if (plants.Length == 0) plants = props.bushes;
+            var rocks = Named(tropical, "rock");
+            if (rocks.Length == 0) rocks = props.rocks;
+
+            Vector3[] palmSpots =
             {
-                float a = Mathf.Lerp(-95f, 95f, R(random)) * Mathf.Deg2Rad;
-                float radius = 5f + R(random) * 7f;
-                var pos = root.position + new Vector3(Mathf.Sin(a) * radius, 0f, Mathf.Cos(a) * radius);
-                if (Mathf.Abs(pos.x - root.position.x) < 5f && pos.z - root.position.z < 4f) continue;
-                float pick = R(random);
-                bool placed = pick < 0.45f ? TrySpawnFitted(props.bushes, root, pos, 1f + R(random), true, random)
-                    : pick < 0.7f ? TrySpawnFitted(props.flowers, root, pos, 0.6f + R(random) * 0.4f, true, random)
-                    : pick < 0.85f ? TrySpawnFitted(props.rocks, root, pos, 0.8f + R(random) * 1.2f, false, random)
-                    : TrySpawnFitted(props.trees, root, pos + Vector3.forward * 3f, 4f + R(random) * 2f, true, random);
-                if (!placed)
+                new Vector3(-8.2f, grassTop, -0.4f), new Vector3(8.4f, grassTop, 0.1f),
+                new Vector3(-7.6f, grassTop, 6.2f), new Vector3(7.8f, grassTop, 5.8f),
+                new Vector3(-3.6f, grassTop, 13.6f), new Vector3(3.4f, grassTop, 13.2f),
+                new Vector3(0.2f, grassTop, 15.2f),
+                new Vector3(-11.2f, grassTop, 2.4f), new Vector3(11.4f, grassTop, 2.8f),
+            };
+            int palmsPlaced = 0;
+            for (int i = 0; i < palmSpots.Length; i++)
+            {
+                if (PlaceLobbyProp(trees, root, palmSpots[i], 6.2f + R(random) * 2.4f, true, R(random) * 360f, random)) palmsPlaced++;
+                else Tree(root, m, root.TransformPoint(palmSpots[i]), random);
+            }
+
+            Vector3[] plantSpots =
+            {
+                new Vector3(-5.6f, 0f, -1.7f), new Vector3(5.5f, 0f, -1.6f),
+                new Vector3(-6.2f, 0f, 1.5f), new Vector3(6.3f, 0f, 1.4f),
+                new Vector3(-5.2f, sandTop, 3.4f), new Vector3(5.3f, sandTop, 3.2f),
+                new Vector3(-2.2f, sandTop, 11.6f), new Vector3(2.4f, sandTop, 11.5f),
+            };
+            foreach (var spot in plantSpots)
+            {
+                if (!PlaceLobbyProp(plants, root, spot, 0.7f + R(random) * 0.5f, true, R(random) * 360f, random))
+                    Bush(root, m, root.TransformPoint(spot), random);
+            }
+            Vector3[] rockSpots =
+            {
+                new Vector3(-7.4f, sandTop, 3.1f), new Vector3(7.5f, sandTop, 2.8f),
+                new Vector3(-7.2f, sandTop, 10.4f), new Vector3(7.3f, sandTop, 10.2f),
+                new Vector3(0.8f, sandTop, 12.4f),
+            };
+            foreach (var spot in rockSpots)
+            {
+                if (!PlaceLobbyProp(rocks, root, spot, 0.7f + R(random) * 0.8f, false, R(random) * 360f, random))
                 {
-                    var rock = Prim(PrimitiveType.Sphere, "Rock", root, pos - root.position, new Vector3(1.2f, 0.7f, 1f) * (0.6f + R(random)), m.rock, false);
+                    var rock = Prim(PrimitiveType.Sphere, "Rock", root, spot, new Vector3(1.1f, 0.7f, 0.9f) * (0.7f + R(random) * 0.5f), m.rock, false);
                     rock.transform.localRotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
                 }
             }
+
+            PlaceLobbyProp(Named(tropical, "tent"), root, new Vector3(-7.8f, grassTop, -1.4f), 3.1f, true, 200f, random);
+            PlaceLobbyProp(Named(tropical, "chest"), root, new Vector3(5.7f, 0f, -1.15f), 0.65f, true, 15f, random);
+            PlaceLobbyProp(Named(tropical, "barrel"), root, new Vector3(5.15f, 0f, 0.55f), 0.85f, true, 40f, random);
+            PlaceLobbyProp(Named(tropical, "barrel"), root, new Vector3(6.15f, 0f, 0.15f), 0.75f, true, 110f, random);
+            PlaceLobbyProp(Named(tropical, "pier"), root, new Vector3(-4.4f, waterTop, 6.4f), 7f, false, 90f, random);
+            PlaceLobbyProp(props.flowers, root, new Vector3(-4.6f, 0f, 1.7f), 0.55f, true, 0f, random);
+            PlaceLobbyProp(props.flowers, root, new Vector3(4.5f, 0f, 1.6f), 0.55f, true, 0f, random);
+
+            var floatMesh = TorusMesh("LobbyFloat", 0.58f, 0.15f, 18, 8);
+            Color[] floatColors =
+            {
+                new Color(1f, 0.38f, 0.58f), new Color(1f, 0.86f, 0.22f),
+                new Color(0.30f, 0.85f, 1f), new Color(0.45f, 0.9f, 0.38f),
+            };
+            Vector3[] floatSpots = { new Vector3(-2.6f, waterTop, 5.2f), new Vector3(1.5f, waterTop, 7.6f), new Vector3(-1.2f, waterTop, 9.4f), new Vector3(3.6f, waterTop, 5.4f) };
+            for (int i = 0; i < floatSpots.Length; i++)
+            {
+                LobbyBobber(root, floatSpots[i], 0.2f + i * 0.22f, 2f + i * 0.35f, bobber =>
+                {
+                    bobber.localRotation = Quaternion.Euler(0f, i * 47f, 0f);
+                    var mat = Lit(stagePrefix + "LobbyFloat" + i, floatColors[i], 0.6f);
+                    MeshObject(floatMesh, "Ring", bobber, Vector3.zero, Vector3.one, mat);
+                });
+            }
+            LobbyBobber(root, new Vector3(3.5f, waterTop + 0.05f, 8.6f), 0.55f, 3.3f, bobber => BuildLobbyRaft(bobber, m));
+            if (props.beachBall != null)
+            {
+                LobbyBobber(root, new Vector3(-3.4f, waterTop + 0.35f, 8.2f), 0.15f, 2.4f, bobber =>
+                    SpawnFitted(props.beachBall, bobber, bobber.position, 0.85f, false, Fit.Center, false, random));
+            }
+
+            Debug.Log("[Fart Raft] Lobby: " + (palmsPlaced > 0 ? palmsPlaced + " tropical palms" : "primitive trees")
+                + ", pier " + (Named(tropical, "pier").Length > 0 ? "yes" : "no")
+                + ", tent " + (Named(tropical, "tent").Length > 0 ? "yes" : "no") + ".");
 
             var view = new GameObject("LobbyCamera").transform;
             view.SetParent(root, false);
@@ -74,6 +148,42 @@ namespace FartRaft.EditorTools
                 lobbySlots[i] = slot;
                 manager.lobbyAvatars[i] = BuildLobbyAvatar(m, slot, i);
             }
+        }
+
+        static Material LobbyPoolMaterial(Mats m)
+        {
+            var pool = Lit(stagePrefix + "LobbyPool", new Color(0.82f, 0.95f, 1f), 0.9f);
+            var texture = m.slideWater.mainTexture;
+            pool.mainTexture = texture;
+            if (pool.HasProperty("_BaseMap")) pool.SetTexture("_BaseMap", texture);
+            pool.mainTextureScale = new Vector2(3.5f, 2.4f);
+            EditorUtility.SetDirty(pool);
+            return pool;
+        }
+
+        static bool PlaceLobbyProp(GameObject[] set, Transform root, Vector3 localPos, float size, bool byHeight, float yaw, System.Random random)
+        {
+            return TrySpawnYaw(set, root, root.TransformPoint(localPos), size, byHeight, yaw, random);
+        }
+
+        static void LobbyBobber(Transform root, Vector3 localPos, float phase, float period, System.Action<Transform> build)
+        {
+            var go = new GameObject("Bobber");
+            go.transform.SetParent(root, false);
+            go.transform.localPosition = localPos;
+            var bob = go.AddComponent<Bob>();
+            bob.height = 0.07f;
+            bob.period = period;
+            bob.phase = phase;
+            build(go.transform);
+        }
+
+        static void BuildLobbyRaft(Transform parent, Mats m)
+        {
+            parent.localRotation = Quaternion.Euler(0f, 28f, 0f);
+            var ring = TorusMesh("LobbyRaft", 0.82f, 0.15f, 20, 8);
+            MeshObject(ring, "Tube", parent, new Vector3(0f, 0.05f, 0f), Vector3.one, m.raftTube);
+            MeshObject(CylinderMesh("LobbyRaftFloor", 0.7f, 0.05f, 14, false), "Floor", parent, new Vector3(0f, 0.08f, 0f), Vector3.one, m.raftFloor);
         }
 
         static LobbyAvatar BuildLobbyAvatar(Mats m, Transform slot, int index)

@@ -983,31 +983,70 @@ namespace FartRaft.EditorTools
             var lightGo = new GameObject("Sun");
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.15f;
+            light.intensity = 1.05f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.45f;
+            light.shadowStrength = 0.62f;
             light.color = stage.sun;
-            lightGo.transform.rotation = Quaternion.Euler(55f, -30f, 0f);
+            // The light shines from the camera side, so faces are lit and shadows fall behind the animals.
+            lightGo.transform.rotation = Quaternion.Euler(50f, -28f, 0f);
 
-            var sky = LoadOrCreateMaterial(stagePrefix + "Sky", Shader.Find("Skybox/Procedural"));
-            if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", stage.skyTint);
-            if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", stage.skyGround);
-            if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.6f);
-            if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.05f);
-            if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.03f);
-            EditorUtility.SetDirty(sky);
+            var fantasy = FindFantasySkybox();
+            if (fantasy != null)
+            {
+                RenderSettings.skybox = fantasy;
+                Debug.Log("[Fart Raft] Skybox: " + fantasy.name);
+            }
+            else
+            {
+                var sky = LoadOrCreateMaterial(stagePrefix + "Sky", Shader.Find("Skybox/Procedural"));
+                if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", stage.skyTint);
+                if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", stage.skyGround);
+                if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.6f);
+                if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.05f);
+                if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.03f);
+                EditorUtility.SetDirty(sky);
+                RenderSettings.skybox = sky;
+                Debug.Log("[Fart Raft] Fantasy Skybox not found, using a procedural sky.");
+            }
 
-            RenderSettings.skybox = sky;
             RenderSettings.sun = light;
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = stage.ambient;
-            RenderSettings.ambientEquatorColor = new Color(0.78f, 0.80f, 0.82f);
-            RenderSettings.ambientGroundColor = new Color(0.62f, 0.55f, 0.52f);
+            RenderSettings.ambientMode = AmbientMode.Skybox;
+            RenderSettings.ambientIntensity = 1.05f;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = stage.fog;
-            RenderSettings.fogStartDistance = 70f;
-            RenderSettings.fogEndDistance = 260f;
+            RenderSettings.fogStartDistance = 90f;
+            RenderSettings.fogEndDistance = 280f;
+        }
+
+        // Fantasy Skybox FREE. Sunless skies are preferred so the painted sun does not fight our light.
+        static Material FindFantasySkybox()
+        {
+            int index = 0;
+            for (int i = 0; i < Stages.Length; i++)
+            {
+                if (ReferenceEquals(Stages[i], stage)) index = i;
+            }
+            string[] names = index == 2
+                ? new[] { "FS002_Sunset_Sunless", "FS013_Sunset_Sunless", "FS017_Sunset_Sunless", "FS003_Sunset_Sunless", "FS002_Sunset" }
+                : index == 1
+                    ? new[] { "FS013_Day_Sunless", "FS003_Day_Sunless", "FS017_Day_Sunless", "FS002_Day_Sunless", "FS013_Day" }
+                    : new[] { "FS002_Day_Sunless", "FS013_Day_Sunless", "FS000_Day_01_Sunless", "FS003_Day_Sunless", "FS002_Day", "FS000_Day_01" };
+
+            foreach (var name in names)
+            {
+                foreach (var guid in AssetDatabase.FindAssets(name + " t:Material"))
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!path.EndsWith(".mat", System.StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(Path.GetFileNameWithoutExtension(path), name, System.StringComparison.OrdinalIgnoreCase)) continue;
+                    var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                    if (mat == null || mat.shader == null) continue;
+                    if (!mat.shader.isSupported || mat.shader.name == "Hidden/InternalErrorShader") continue;
+                    return mat;
+                }
+            }
+            return null;
         }
 
         static void BuildEnvironment(Track tr, Transform parent, Mats m, System.Random random)
@@ -1724,7 +1763,7 @@ namespace FartRaft.EditorTools
         class Mats
         {
             // Stage colors; every stage gets its own copy of these materials.
-            public readonly Material slideWater = Textured(stagePrefix + "SlideWater", WaterTexture(), new Color(0.86f, 0.86f, 0.86f), 0.6f);
+            public readonly Material slideWater = Textured(stagePrefix + "SlideWater", WaterTexture(), new Color(0.92f, 0.96f, 1f), 0.84f);
             public readonly Material slideBody = Lit(stagePrefix + "SlideBody", stage.slideBody, 0.3f);
             public readonly Material bumper = Lit(stagePrefix + "Bumper", stage.bumper, 0.3f);
             public readonly Material coral = Lit(stagePrefix + "Coral", stage.coral, 0.05f);
@@ -1809,6 +1848,7 @@ namespace FartRaft.EditorTools
         {
             var mat = Lit(name, color, smoothness);
             mat.mainTexture = texture;
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", texture);
             EditorUtility.SetDirty(mat);
             return mat;
         }

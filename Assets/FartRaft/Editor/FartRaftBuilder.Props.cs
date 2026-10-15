@@ -8,7 +8,8 @@ namespace FartRaft.EditorTools
 {
     // Models from Asset Store packs imported into this Unity project (they are not part of the repo).
     // Every set is optional: when a pack is missing the builder falls back to its own primitive props.
-    //   EmbersStorm - Free Nature Pack, ArchiBoxCo Nature Pack, YGS Beach Party & Fun Pack, Quirky Series (FREE).
+    //   EmbersStorm - Free Nature Pack, ArchiBoxCo Nature Pack, YGS Beach Party & Fun Pack, Quirky Series (FREE),
+    //   Low Poly Tropical Island Lite (palms, plants, rocks, pier, tent, chest, barrels).
     public static partial class FartRaftBuilder
     {
         class StageProps
@@ -61,6 +62,18 @@ namespace FartRaft.EditorTools
         static GameObject[] Named(GameObject[] set, params string[] names) =>
             set.Where(g => names.Any(n => g.name.ToLowerInvariant().Contains(n))).ToArray();
 
+        // Low Poly Tropical Island Lite. The folder name varies a little between imports.
+        static GameObject[] TropicalPrefabs()
+        {
+            var found = Prefabs("lowpolytropicalenvironment");
+            if (found.Length > 0) return found;
+            found = Prefabs("tropicalenvironment_lite");
+            if (found.Length > 0) return found;
+            found = Prefabs("low poly tropical");
+            if (found.Length > 0) return found;
+            return Prefabs("tropical island");
+        }
+
         static void LoadStageProps(int index)
         {
             const string embers = "embersstorm";
@@ -77,6 +90,11 @@ namespace FartRaft.EditorTools
             var archiTrees = Prefabs("archiboxco/nature pack/prefabs/tree");
 
             var beach = Prefabs("beach party", "/prefabs/");
+            var tropical = TropicalPrefabs();
+            var palms = Named(tropical, "palm");
+            var tropPlants = Named(tropical, "plant");
+            var tropRocks = Named(tropical, "rock");
+            var tropParty = Named(tropical, "barrel", "chest", "tent", "plank", "skull");
             var animals = Prefabs("quirky series", "/prefabs/").Where(g =>
             {
                 string path = AssetDatabase.GetAssetPath(g).ToLowerInvariant();
@@ -92,24 +110,26 @@ namespace FartRaft.EditorTools
             switch (index)
             {
                 case 0:
-                    props.trees = Join(oak, archiTrees);
-                    props.bushes = bushes;
+                    props.trees = Join(palms, oak, archiTrees);
+                    props.bushes = Join(tropPlants, bushes);
                     props.flowers = Join(flowers, mushrooms);
-                    props.rocks = rocks;
-                    props.decor = Named(beach, "umbella", "umbrella", "chair", "sand castle", "surfboard", "sea star", "bucket");
+                    props.rocks = Join(tropRocks, rocks);
+                    props.decor = Join(tropParty, Named(beach, "umbella", "umbrella", "chair", "sand castle", "surfboard", "sea star", "bucket"));
                     props.animals = animals.Where(a => a != props.fish).ToArray();
                     break;
                 case 1:
-                    props.trees = Join(pine, oak);
-                    props.bushes = Join(bushes, plants);
+                    props.trees = Join(palms, pine, oak);
+                    props.bushes = Join(tropPlants, bushes, plants);
                     props.flowers = Join(mushrooms, grass);
-                    props.rocks = rocks;
+                    props.rocks = Join(tropRocks, rocks);
+                    props.decor = tropParty;
                     props.animals = Named(animals, "colobus", "gecko", "taipan", "sparrow", "pudu", "muskrat");
                     break;
                 default:
                     props.trees = deadTrees;
-                    props.bushes = deadBushes;
-                    props.rocks = rocks;
+                    props.bushes = Join(deadBushes, tropPlants);
+                    props.rocks = Join(tropRocks, rocks);
+                    props.decor = Named(tropical, "skull", "barrel");
                     props.animals = Named(animals, "gecko", "taipan", "muskrat");
                     break;
             }
@@ -155,6 +175,18 @@ namespace FartRaft.EditorTools
             var prefab = Pick(set, random);
             if (prefab == null) return false;
             SpawnFitted(prefab, parent, pos, size, byHeight, Fit.Ground, true, random);
+            return true;
+        }
+
+        // Like TrySpawnFitted, but the prop faces `yaw` degrees instead of a random direction.
+        static bool TrySpawnYaw(GameObject[] set, Transform parent, Vector3 pos, float size, bool byHeight, float yaw, System.Random random)
+        {
+            var prefab = Pick(set, random);
+            if (prefab == null) return false;
+            var pivot = new GameObject(prefab.name);
+            pivot.transform.SetParent(parent, false);
+            pivot.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+            SpawnFitted(prefab, pivot.transform, pos, size, byHeight, Fit.Ground, false, random);
             return true;
         }
 

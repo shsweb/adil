@@ -29,7 +29,7 @@ one round inflatable raft, and fart it down floating water slides high above the
   - **HARD**: the original physics - no auto-forward, the raft spins freely, one spiky hit kills.
 - HUD: progress bar, timer, death counter and name tags over each animal.
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
-- **Lobby** (like Fart Together): the animals stand in a row in a little 3D canyon.
+- **Lobby** (like Fart Together): the animals stand in a row on a wooden deck in a jungle clearing, with a pool, floats and a little raft behind them.
   - Tap **+ JOIN** over an empty spot to add a player (1-4 players, solo works too); tap the last player's tag to remove them.
   - **< >** under each animal picks the character (capy, penguin, croc, gorilla). Each animal has its own fart pitch
     and fart cloud color, farts now and then while waiting and dances when picked. Picks are saved.
@@ -77,7 +77,12 @@ folders before copying the new ones (removed scripts would otherwise stay behind
     umbrellas, chairs and sand castles on the Sunny cliffs, and the rolling beach ball.
   - [Quirky Series – FREE Animals Pack](https://assetstore.unity.com/packages/3d/characters/animals/quirky-series-free-animals-pack-178235):
     animals watching from the cliffs, and the jumping fish (herring).
-  The Console shows how many models each stage found. Models are sized automatically, and Built-in materials are
+  - [Low Poly Tropical Island Lite](https://assetstore.unity.com/packages/3d/environments/low-poly-tropical-island-lite-242437):
+    palm trees, plants and rocks on the cliffs and in the lobby, plus a pier, tent, chest and barrels by the pool.
+  - [Fantasy Skybox FREE](https://assetstore.unity.com/packages/2d/textures-materials/sky/fantasy-skybox-free-18353):
+    a painted day sky for Sunny Slides and Jungle Rapids, and a sunset sky for Volcano Run. The lobby uses the same sky.
+  The Console shows how many models each stage found, which skybox was used, and whether the lobby found the tropical props.
+  Models are sized automatically, and Built-in materials are
   converted when the project uses URP (and the other way around). These packs are not part of this repo.
 - To choose models yourself, select `Assets/FartRaft/EnvironmentTheme` and drag prefabs into its lists; non-empty
   lists win over the automatic picks. `Prop Scale` makes every model bigger or smaller.
