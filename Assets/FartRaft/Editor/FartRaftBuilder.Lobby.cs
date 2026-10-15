@@ -156,7 +156,7 @@ namespace FartRaft.EditorTools
                 manager.joinTexts[i] = Label(tag, "Text", "PLAYER " + (i + 1), 40, center, Vector2.zero, new Vector2(300f, 76f));
 
                 var mark = UIObject("Joined", tag);
-                Place(mark, center, new Vector2(0f, 82f), new Vector2(72f, 72f));
+                Place(mark, center, new Vector2(-150f, 0f), new Vector2(68f, 68f));
                 var circle = mark.gameObject.AddComponent<Image>();
                 circle.sprite = circleSprite;
                 circle.color = new Color(0.3f, 0.78f, 0.3f);
@@ -175,9 +175,8 @@ namespace FartRaft.EditorTools
                 var nameBack = Box(picker, "NameBack", center, Vector2.zero, new Vector2(170f, 70f), new Color(1f, 1f, 1f, 0.92f));
                 var name = Label(nameBack, "Name", "", 38, center, Vector2.zero, new Vector2(160f, 66f));
                 name.color = dark;
-                name.resizeTextForBestFit = true;
-                name.resizeTextMinSize = 20;
-                name.resizeTextMaxSize = 40;
+                FitText(name, 20, 38);
+                Object.DestroyImmediate(name.GetComponent<Outline>());
                 manager.characterNames[i] = name;
                 manager.characterPrevButtons[i] = MakeButton(picker, "Prev", "<", center, new Vector2(-126f, 0f), new Vector2(74f, 96f), pc, 60);
                 manager.characterNextButtons[i] = MakeButton(picker, "Next", ">", center, new Vector2(126f, 0f), new Vector2(74f, 96f), pc, 60);
@@ -201,15 +200,13 @@ namespace FartRaft.EditorTools
                 var card = UIObject("Card_" + (k + 1), lobby);
                 Place(card, center, pos, new Vector2(cardW, cardH));
 
-                var highlight = Box(card, "Highlight", center, Vector2.zero, new Vector2(cardW + 16f, cardH + 16f), new Color(0.95f, 0.25f, 0.55f));
+                var highlight = real ? Box(card, "Highlight", center, Vector2.zero, new Vector2(cardW + 16f, cardH + 16f), new Color(0.95f, 0.25f, 0.55f)) : null;
                 Color face = real ? Color.Lerp(Stages[k].skyTint, Stages[k].slideBody, 0.5f) : new Color(0.45f, 0.45f, 0.48f);
                 var faceRt = Box(card, "Face", center, Vector2.zero, new Vector2(cardW, cardH), face);
                 var stripe = Box(faceRt, "Stripe", new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(cardW - 16f, 64f), new Color(0.1f, 0.1f, 0.15f, 0.75f));
                 var title = Label(stripe, "Title", real ? Stages[k].name : ComingSoonStages[k - Stages.Length], 30, center, Vector2.zero, new Vector2(cardW - 24f, 60f));
                 title.color = real ? new Color(1f, 0.92f, 0.3f) : new Color(0.8f, 0.8f, 0.8f);
-                title.resizeTextForBestFit = true;
-                title.resizeTextMinSize = 16;
-                title.resizeTextMaxSize = 30;
+                FitText(title, 16, 30);
                 Label(faceRt, "Number", real ? "STAGE " + (k + 1) : "COMING SOON", real ? 34 : 26, new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(cardW - 20f, 50f));
 
                 if (!real) continue;
@@ -221,7 +218,17 @@ namespace FartRaft.EditorTools
             }
 
             manager.playButton = MakeButton(lobby, "Play", "PLAY!", new Vector2(1f, 0f), new Vector2(-220f, 140f), new Vector2(360f, 200f), new Color(0.35f, 0.8f, 0.25f), 86);
-            Label(lobby, "Hint", "Tap + JOIN to add friends - everyone plays on this phone!", 28, new Vector2(0.5f, 0f), new Vector2(-170f, 32f), new Vector2(1300f, 50f));
+            var hint = Label(lobby, "Hint", "Tap + JOIN to add friends - everyone plays on this phone!", 28, center, new Vector2(150f, -238f), new Vector2(760f, 50f));
+            hint.alignment = TextAnchor.MiddleLeft;
+        }
+
+        // Shrinks the text until it fits its box on one or two lines.
+        static void FitText(Text text, int min, int max)
+        {
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = min;
+            text.resizeTextMaxSize = max;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
         }
 
         // Check mark from two white bars.

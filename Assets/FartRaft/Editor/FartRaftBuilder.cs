@@ -1504,7 +1504,8 @@ namespace FartRaft.EditorTools
             var scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.matchWidthOrHeight = 1f;
+            canvasGo.AddComponent<AdaptiveCanvas>();
             canvasGo.AddComponent<GraphicRaycaster>();
 
             var eventSystem = new GameObject("EventSystem", typeof(EventSystem));

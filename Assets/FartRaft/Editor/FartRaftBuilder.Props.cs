@@ -204,10 +204,9 @@ namespace FartRaft.EditorTools
         {
             if (convertedMaterials.TryGetValue(source, out Material done)) return done;
 
-            Color color = source.HasProperty("_BaseColor") ? source.GetColor("_BaseColor")
-                : source.HasProperty("_Color") ? source.GetColor("_Color") : Color.white;
-            Texture texture = source.HasProperty("_BaseMap") ? source.GetTexture("_BaseMap")
-                : source.HasProperty("_MainTex") ? source.GetTexture("_MainTex") : null;
+            ReadSavedProperties(source, out Color color, out Texture texture, out string textureName, out string colorName);
+            Debug.Log($"[Fart Raft] Converted material '{source.name}' (shader '{(source.shader != null ? source.shader.name : "none")}'): " +
+                      $"texture {(texture != null ? textureName + "=" + texture.name : "none")}, color {(colorName ?? "none")}={color}");
 
             var mat = new Material(LitShader()) { name = source.name + "_Converted" };
             mat.color = color;
@@ -223,6 +222,64 @@ namespace FartRaft.EditorTools
             AssetDatabase.CreateAsset(mat, GeneratedFolder + "/Converted_" + (convertedCounter++) + ".mat");
             convertedMaterials[source] = mat;
             return mat;
+        }
+
+        static readonly string[] MainTextureNames = { "_BaseMap", "_MainTex", "_Albedo", "_AlbedoMap", "_BaseColorMap", "_Diffuse", "_MainTexture", "_Texture" };
+        static readonly string[] MainColorNames = { "_BaseColor", "_Color", "_MainColor", "_Tint", "_AlbedoColor", "_DiffuseColor" };
+        static readonly string[] NotMainParts = { "normal", "bump", "mask", "emiss", "metal", "occlus", "spec", "height", "detail", "rough", "shadow", "rim", "outline" };
+
+        // Reads the values stored in the material file. When the original shader is missing,
+        // Material.GetColor / GetTexture return nothing, which is why converted props came out white.
+        static void ReadSavedProperties(Material source, out Color color, out Texture texture, out string textureName, out string colorName)
+        {
+            var textures = new List<KeyValuePair<string, Texture>>();
+            var colors = new List<KeyValuePair<string, Color>>();
+            var so = new SerializedObject(source);
+            var texEnvs = so.FindProperty("m_SavedProperties.m_TexEnvs");
+            if (texEnvs != null)
+            {
+                for (int i = 0; i < texEnvs.arraySize; i++)
+                {
+                    var entry = texEnvs.GetArrayElementAtIndex(i);
+                    var tex = entry.FindPropertyRelative("second.m_Texture")?.objectReferenceValue as Texture;
+                    if (tex != null) textures.Add(new KeyValuePair<string, Texture>(entry.FindPropertyRelative("first").stringValue, tex));
+                }
+            }
+            var colorEnvs = so.FindProperty("m_SavedProperties.m_Colors");
+            if (colorEnvs != null)
+            {
+                for (int i = 0; i < colorEnvs.arraySize; i++)
+                {
+                    var entry = colorEnvs.GetArrayElementAtIndex(i);
+                    colors.Add(new KeyValuePair<string, Color>(entry.FindPropertyRelative("first").stringValue, entry.FindPropertyRelative("second").colorValue));
+                }
+            }
+
+            var pickedTexture = PickMain(textures, MainTextureNames);
+            texture = pickedTexture.Value;
+            textureName = pickedTexture.Key;
+            var pickedColor = PickMain(colors, MainColorNames);
+            colorName = pickedColor.Key;
+            color = colorName != null ? pickedColor.Value : Color.white;
+            color.a = 1f;
+        }
+
+        static KeyValuePair<string, T> PickMain<T>(List<KeyValuePair<string, T>> items, string[] preferred)
+        {
+            foreach (var name in preferred)
+            {
+                foreach (var item in items)
+                {
+                    if (item.Key == name) return item;
+                }
+            }
+            foreach (var item in items)
+            {
+                string lower = item.Key.ToLowerInvariant();
+                if (NotMainParts.Any(part => lower.Contains(part))) continue;
+                if (lower.Contains("base") || lower.Contains("main") || lower.Contains("albedo") || lower.Contains("diff") || lower.Contains("color") || lower.Contains("tex")) return item;
+            }
+            return default;
         }
 
         // Funny animals standing on a cliff edge, watching the raft go by.
