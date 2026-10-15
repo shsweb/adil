@@ -28,8 +28,9 @@ one round inflatable raft, and fart it down floating water slides high above the
   4. **Ice World**: a slippery course. The raft keeps sliding after you let go.
   5. **Sewer Splash**: a murky green course.
   Every course has a yellow **jump ramp**. Go fast and the raft hops. Pull the joystick back to slow down and wait.
-- Your best time is saved on this phone, per stage, difficulty and player count. A shared online board needs the same Unity room setup as friends, so it is not in the game yet.
-- Online friends (two phones, one code) is not in this build. It needs Unity Lobby and Relay turned on for the project first.
+- Your best time is saved on this phone, per stage, difficulty and player count.
+- **ONLINE**: one phone taps HOST and reads the code. The other phones type it and tap JOIN. Each phone is one player on the same raft. The host phone runs the race.
+  One-time setup: Unity menu **Fart Raft > 4. Install Online Play**, then **Edit > Project Settings > Services**, link the project, and turn Relay on.
 - **Difficulty** (**SETTINGS > MODE** in the lobby, the choice is remembered):
   - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer. Pull the joystick back to slow down and wait.
     Animals jump to the right spot instantly, farts are stronger, gas lasts longer, obstacles move slower

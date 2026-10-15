@@ -70,6 +70,22 @@ namespace FartRaft
         public Button[] modeButtons = new Button[3];
         public Text placeText;
         public Button playButton;
+        public GameObject onlinePanel;
+        public Text onlineStatus;
+        public Text onlineCode;
+        public Button onlineButton;
+        public Button onlineHostButton;
+        public Button onlineJoinButton;
+        public Button onlineLeaveButton;
+        public Button onlineCloseButton;
+        public InputField onlineCodeInput;
+
+        public struct NetSeat
+        {
+            public bool active;
+            public float angle;
+            public int character;
+        }
 
         [Header("Settings")]
         public Button settingsButton;
@@ -178,6 +194,12 @@ namespace FartRaft
                 if (stageCards[i] != null && i < stageNames.Length) stageCards[i].onClick.AddListener(() => PickStage(stage));
             }
             if (playButton != null) playButton.onClick.AddListener(() => StartGame(playerCount));
+            if (onlineButton != null) onlineButton.onClick.AddListener(() => Online.Open(this));
+            if (onlineHostButton != null) onlineHostButton.onClick.AddListener(() => Online.Host(this));
+            if (onlineJoinButton != null) onlineJoinButton.onClick.AddListener(() => Online.Join(this, onlineCodeInput != null ? onlineCodeInput.text : ""));
+            if (onlineLeaveButton != null) onlineLeaveButton.onClick.AddListener(() => Online.Leave(this));
+            if (onlineCloseButton != null) onlineCloseButton.onClick.AddListener(() => { if (onlinePanel != null) onlinePanel.SetActive(false); });
+            if (onlinePanel != null) onlinePanel.SetActive(false);
             playMode = GameSettings.Mode;
             if (modeButtons != null)
             {
@@ -308,6 +330,19 @@ namespace FartRaft
         void PickStage(int index)
         {
             if (index == stageIndex) return;
+            if (Online.IsClient)
+            {
+                SetOnlineStatus("The host picks the stage.");
+                ShowOnlinePanel();
+                return;
+            }
+            if (Online.IsHost) Online.TellStage(index);
+            LoadStage(index, 0);
+        }
+
+        public void GoToStage(int index)
+        {
+            if (index == stageIndex) return;
             LoadStage(index, 0);
         }
 
@@ -379,6 +414,7 @@ namespace FartRaft
 
         void Start()
         {
+            Online.Attach(this);
             if (pendingPlayers > 0)
             {
                 int count = pendingPlayers;
@@ -424,13 +460,21 @@ namespace FartRaft
 
         public void StartGame(int count)
         {
+            if (Online.IsClient)
+            {
+                SetOnlineStatus("Wait for the host to press PLAY.");
+                ShowOnlinePanel();
+                return;
+            }
             StopRoutine();
+            if (Online.IsHost) count = Mathf.Clamp(Online.RemotePlayers + 1, 1, 4);
             playerCount = Mathf.Clamp(count, 1, 4);
             ConfigureSeats();
 
             menuPanel.SetActive(false);
             finishPanel.SetActive(false);
             if (settingsPanel != null) settingsPanel.SetActive(false);
+            if (onlinePanel != null) onlinePanel.SetActive(false);
             hudPanel.SetActive(true);
             if (cameraFollow != null) cameraFollow.fixedView = null;
             MusicPlayer.Instance.Play(raceMusic);
@@ -471,6 +515,7 @@ namespace FartRaft
             ShowMessage(playMode == PlayMode.Rumble ? "SHOVE!" : "FART!", 1f);
             SetLocked(false);
             racing = true;
+            Online.HostBegan(playerCount);
             if (rivalDriver != null && rival != null && rival.gameObject.activeSelf) rivalDriver.racing = true;
             routine = null;
         }
@@ -488,7 +533,8 @@ namespace FartRaft
             {
                 bool active = i < playerCount;
                 seats[i].gameObject.SetActive(active);
-                joysticks[i].gameObject.SetActive(active);
+                bool showStick = active && (!Online.IsClient || i == Online.LocalSeat);
+                joysticks[i].gameObject.SetActive(showStick);
                 if (!active) continue;
 
                 seats[i].SetAngle(angles[i]);
@@ -501,7 +547,7 @@ namespace FartRaft
         void SetLocked(bool locked, bool everyone = true)
         {
             foreach (var seat in seats) seat.locked = locked;
-            raft.SetFrozen(locked);
+            raft.SetFrozen(locked || Online.IsClient);
             if (!everyone || rival == null || !rival.gameObject.activeSelf) return;
             rival.SetFrozen(locked);
             if (rivalSeats == null) return;
@@ -631,9 +677,14 @@ namespace FartRaft
         void Update()
         {
             if (raft == null) return;
-            if (racing) raceTime += Time.deltaTime;
+            if (racing && !Online.IsClient) raceTime += Time.deltaTime;
 
             UpdateProgress();
+            if (Online.IsClient)
+            {
+                UpdateHud();
+                return;
+            }
             if (racing && !dying && playMode != PlayMode.Rumble && coursePath != null && coursePath.Length > 0 &&
                 raft.transform.position.y < coursePath[Mathf.Max(progressIndex, 0)].y - fallDepth)
             {
@@ -681,7 +732,7 @@ namespace FartRaft
 
         public void OnHazard(Raft who, Vector3 point)
         {
-            if (!racing) return;
+            if (!racing || Online.IsClient) return;
             if (who == rival)
             {
                 if (!rivalDown) RivalHazard(point);
@@ -767,7 +818,7 @@ namespace FartRaft
 
         public bool OnBeans(Raft who, Vector3 position)
         {
-            if (!racing) return false;
+            if (!racing || Online.IsClient) return false;
             if (who == rival)
             {
                 rivalBeansUntil = Time.time + beansTime;
@@ -786,7 +837,7 @@ namespace FartRaft
 
         public void OnCheckpoint(Checkpoint checkpoint, Raft who)
         {
-            if (!racing) return;
+            if (!racing || Online.IsClient) return;
             if (who == rival)
             {
                 if (rivalDriver != null && checkpoint.index == rivalDriver.Checkpoints)
@@ -806,7 +857,7 @@ namespace FartRaft
 
         public void OnFinish(Raft who)
         {
-            if (!racing || playMode == PlayMode.Rumble) return;
+            if (!racing || Online.IsClient || playMode == PlayMode.Rumble) return;
             if (who == rival)
             {
                 if (rivalDriver == null || rivalDriver.Checkpoints < checkpointCount) return;
@@ -856,6 +907,7 @@ namespace FartRaft
                               (bestLine.Length > 0 ? "\n" + bestLine : "");
             if (nextStageButton != null) nextStageButton.gameObject.SetActive(HasNextStage);
             finishPanel.SetActive(true);
+            Online.SendFinish(finishText.text);
         }
 
         void ShowMessage(string text, float duration)
@@ -934,7 +986,128 @@ namespace FartRaft
             finishText.text = playerWon ? "YOU WON RAFT RUMBLE!" : "THE YELLOW RAFT WON RAFT RUMBLE!";
             if (nextStageButton != null) nextStageButton.gameObject.SetActive(false);
             finishPanel.SetActive(true);
+            Online.SendFinish(finishText.text);
             routine = null;
+        }
+
+        public void ShowOnlinePanel()
+        {
+            if (onlinePanel != null) onlinePanel.SetActive(true);
+        }
+
+        public void SetOnlineStatus(string text)
+        {
+            if (onlineStatus != null) onlineStatus.text = text;
+        }
+
+        public void SetOnlineCode(string code)
+        {
+            if (onlineCode != null) onlineCode.text = code;
+        }
+
+        public void SetOnlineHeadcount(int count)
+        {
+            if (racing) return;
+            SetPlayerCount(Mathf.Clamp(count, 1, 4));
+        }
+
+        public Vector2 LocalStick()
+        {
+            int i = Online.LocalSeat;
+            if (i < 0 || i >= seats.Length || seats[i] == null) return Vector2.zero;
+            return seats[i].StickInput;
+        }
+
+        public int LocalCharacter()
+        {
+            int i = Online.IsClient ? Online.LocalSeat : 0;
+            if (i < 0 || i >= seats.Length || seats[i] == null) return 0;
+            return Mathf.Max(0, seats[i].CharacterIndex);
+        }
+
+        public void ApplyRemoteStick(int seat, Vector2 stick, int character)
+        {
+            if (seat <= 0 || seat >= seats.Length || seats[seat] == null) return;
+            if (!seats[seat].gameObject.activeSelf) seats[seat].gameObject.SetActive(true);
+            seats[seat].StickInput = stick;
+            if (character != seats[seat].CharacterIndex && seats[seat].HasCharacter(character)) SetCharacter(seat, character);
+        }
+
+        public bool TryNetSnapshot(out Vector3 pos, out float yaw, out bool hostRacing, out float hostTime, out int count, out NetSeat[] netSeats)
+        {
+            pos = raft != null ? raft.transform.position : Vector3.zero;
+            yaw = raft != null ? raft.transform.eulerAngles.y : 0f;
+            hostRacing = racing;
+            hostTime = raceTime;
+            count = playerCount;
+            netSeats = new NetSeat[4];
+            for (int i = 0; i < seats.Length && i < 4; i++)
+            {
+                netSeats[i].active = seats[i] != null && seats[i].gameObject.activeSelf;
+                netSeats[i].angle = seats[i] != null ? seats[i].angle : 0f;
+                netSeats[i].character = seats[i] != null ? seats[i].CharacterIndex : 0;
+            }
+            return raft != null;
+        }
+
+        public void ApplyNetState(Vector3 pos, float yaw, bool hostRacing, float hostTime, NetSeat[] netSeats, int count)
+        {
+            if (!Online.IsClient || raft == null) return;
+            raceTime = hostTime;
+            var body = raft.Body;
+            var rot = Quaternion.Euler(0f, yaw, 0f);
+            body.position = Vector3.Lerp(body.position, pos, 0.5f);
+            body.rotation = Quaternion.Slerp(body.rotation, rot, 0.5f);
+            if (netSeats == null) return;
+            for (int i = 0; i < seats.Length && i < netSeats.Length; i++)
+            {
+                if (i == Online.LocalSeat) continue;
+                bool on = netSeats[i].active && i < count;
+                if (seats[i] == null) continue;
+                seats[i].gameObject.SetActive(on);
+                if (!on) continue;
+                seats[i].SetAngle(netSeats[i].angle);
+                if (netSeats[i].character != seats[i].CharacterIndex && seats[i].HasCharacter(netSeats[i].character))
+                    SetCharacter(i, netSeats[i].character);
+            }
+            if (hostRacing && !racing) StartJoined(count);
+        }
+
+        public void StartJoined(int count)
+        {
+            if (racing) return;
+            StopRoutine();
+            playerCount = Mathf.Clamp(count, 1, 4);
+            ConfigureSeats();
+            menuPanel.SetActive(false);
+            finishPanel.SetActive(false);
+            if (settingsPanel != null) settingsPanel.SetActive(false);
+            if (onlinePanel != null) onlinePanel.SetActive(false);
+            hudPanel.SetActive(true);
+            if (cameraFollow != null)
+            {
+                cameraFollow.arenaView = false;
+                cameraFollow.fixedView = null;
+            }
+            MusicPlayer.Instance.Play(raceMusic);
+            dying = false;
+            raceTime = 0f;
+            deaths = 0;
+            SetFlash(0f);
+            SetLocked(false);
+            racing = true;
+            ShowMessage("FART!", 1f);
+        }
+
+        public void ShowNetFinish(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            racing = false;
+            SetLocked(true);
+            finishText.text = text;
+            if (nextStageButton != null) nextStageButton.gameObject.SetActive(false);
+            finishPanel.SetActive(true);
+            hudPanel.SetActive(false);
         }
 
         static string FormatTime(float seconds)

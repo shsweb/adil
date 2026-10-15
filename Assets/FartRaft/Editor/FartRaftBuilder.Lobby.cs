@@ -250,6 +250,7 @@ namespace FartRaft.EditorTools
             Label(banner, "Text", "LOBBY", 62, center, Vector2.zero, new Vector2(420f, 100f));
 
             manager.settingsButton = MakeButton(lobby, "Settings", "SETTINGS", new Vector2(1f, 1f), new Vector2(-180f, -65f), new Vector2(300f, 100f), new Color(0.16f, 0.17f, 0.26f, 0.96f), 40);
+            manager.onlineButton = MakeButton(lobby, "Online", "ONLINE", new Vector2(1f, 1f), new Vector2(-180f, -175f), new Vector2(300f, 90f), new Color(0.18f, 0.45f, 0.85f, 0.96f), 40);
 
             for (int i = 0; i < 4; i++)
             {
@@ -405,6 +406,47 @@ namespace FartRaft.EditorTools
             manager.soundText = manager.soundButton.GetComponentInChildren<Text>();
             Label(box, "ModeHint", "EASY = the raft goes by itself. HARD = like the real game. RACE is you alone. TEAM races a yellow raft. RUMBLE knocks it off an island.", 24, center, new Vector2(0f, -210f), new Vector2(760f, 70f));
             manager.settingsCloseButton = MakeButton(box, "Close", "CLOSE", center, new Vector2(0f, -300f), new Vector2(360f, 90f), PlayerColors[2], 42);
+            panel.gameObject.SetActive(false);
+            BuildOnlineUI(root, manager);
+        }
+
+        static void BuildOnlineUI(Transform root, GameManager manager)
+        {
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            var panel = Panel(root, "Online", new Color(0f, 0f, 0f, 0.6f));
+            manager.onlinePanel = panel.gameObject;
+            var box = Box(panel, "Box", center, Vector2.zero, new Vector2(860f, 720f), new Color(0.16f, 0.17f, 0.26f, 0.98f));
+            var title = Label(box, "Title", "ONLINE", 72, center, new Vector2(0f, 280f), new Vector2(760f, 90f));
+            title.color = new Color(0.55f, 0.8f, 1f);
+            manager.onlineStatus = Label(box, "Status", "One phone taps HOST. The other types the code and taps JOIN.", 28, center, new Vector2(0f, 190f), new Vector2(780f, 90f));
+            manager.onlineCode = Label(box, "Code", "", 64, center, new Vector2(0f, 90f), new Vector2(760f, 80f));
+            manager.onlineCode.color = new Color(1f, 0.92f, 0.3f);
+
+            var field = UIObject("CodeInput", box);
+            Place(field, center, new Vector2(0f, -10f), new Vector2(420f, 80f));
+            var fieldImage = field.gameObject.AddComponent<Image>();
+            fieldImage.sprite = roundedSprite;
+            fieldImage.type = Image.Type.Sliced;
+            fieldImage.color = Color.white;
+            var typed = Label(field, "Text", "", 40, center, Vector2.zero, new Vector2(400f, 70f));
+            typed.color = new Color(0.1f, 0.1f, 0.15f);
+            Object.DestroyImmediate(typed.GetComponent<Outline>());
+            var placeholder = Label(field, "Placeholder", "CODE", 40, center, Vector2.zero, new Vector2(400f, 70f));
+            placeholder.color = new Color(0.55f, 0.55f, 0.6f);
+            placeholder.fontStyle = FontStyle.Italic;
+            Object.DestroyImmediate(placeholder.GetComponent<Outline>());
+            var input = field.gameObject.AddComponent<InputField>();
+            input.textComponent = typed;
+            input.placeholder = placeholder;
+            input.characterLimit = 6;
+            input.characterValidation = InputField.CharacterValidation.Alphanumeric;
+            manager.onlineCodeInput = input;
+
+            manager.onlineHostButton = MakeButton(box, "Host", "HOST", center, new Vector2(-200f, -120f), new Vector2(340f, 90f), new Color(0.35f, 0.8f, 0.25f), 40);
+            manager.onlineJoinButton = MakeButton(box, "Join", "JOIN", center, new Vector2(200f, -120f), new Vector2(340f, 90f), new Color(0.18f, 0.45f, 0.85f), 40);
+            manager.onlineLeaveButton = MakeButton(box, "Leave", "LEAVE", center, new Vector2(-200f, -230f), new Vector2(340f, 80f), new Color(0.7f, 0.28f, 0.22f), 36);
+            manager.onlineCloseButton = MakeButton(box, "Close", "CLOSE", center, new Vector2(200f, -230f), new Vector2(340f, 80f), PlayerColors[0], 36);
+            Label(box, "Hint", "Each phone is one player on the same raft. The host phone runs the race.", 24, center, new Vector2(0f, -310f), new Vector2(780f, 50f));
             panel.gameObject.SetActive(false);
         }
 
