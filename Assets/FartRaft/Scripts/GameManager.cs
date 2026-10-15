@@ -118,6 +118,7 @@ namespace FartRaft
         bool dying;
         bool rivalDown;
         float rivalBeansUntil = -100f;
+        int raftLayer;
         bool syncActive;
         float raceTime;
         int deaths;
@@ -145,6 +146,7 @@ namespace FartRaft
         void Awake()
         {
             Instance = this;
+            if (raft != null) raftLayer = raft.gameObject.layer;
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
             Time.fixedDeltaTime = 1f / 60f;
@@ -590,6 +592,7 @@ namespace FartRaft
 
         void FixedUpdate()
         {
+            if (raft == null) return;
             int active = 0;
             int farting = 0;
             foreach (var seat in seats)
@@ -627,6 +630,7 @@ namespace FartRaft
 
         void Update()
         {
+            if (raft == null) return;
             if (racing) raceTime += Time.deltaTime;
 
             UpdateProgress();
@@ -662,15 +666,17 @@ namespace FartRaft
 
         void SetGhost(bool ghost)
         {
-            if (ghost == ghostActive) return;
+            if (ghost == ghostActive || raft == null) return;
             ghostActive = ghost;
-            Physics.IgnoreLayerCollision(raft.gameObject.layer, Hazard.Layer, ghost);
+            Physics.IgnoreLayerCollision(raftLayer, Hazard.Layer, ghost);
             raft.SetBlinking(ghost);
         }
 
         void OnDestroy()
         {
-            Physics.IgnoreLayerCollision(raft.gameObject.layer, Hazard.Layer, false);
+            // The raft is often already destroyed when the scene closes. Remembered layer, so this does not touch it.
+            Physics.IgnoreLayerCollision(raftLayer, Hazard.Layer, false);
+            if (Instance == this) Instance = null;
         }
 
         public void OnHazard(Raft who, Vector3 point)
