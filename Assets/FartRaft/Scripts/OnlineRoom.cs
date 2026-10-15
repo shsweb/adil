@@ -148,13 +148,49 @@ namespace FartRaft
 
         static string Short(Exception ex)
         {
-            string message = ex.Message ?? "Online failed.";
-            if (message.IndexOf("project", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("unauthorized", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("401", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "Link this project first: Edit > Project Settings > Services. Then turn Relay on in the Unity dashboard.";
+            Debug.LogException(ex);
+            // Unity Services hides the real reason inside inner exceptions, so read all of them.
+            string all = AllMessages(ex);
+            if (Has(all, "project id") || Has(all, "link") || Has(all, "cloud project") || Has(all, "projectid"))
+                return "Link this project first: Edit > Project Settings > Services. Pick or create a cloud project. Then press Play again.";
+            if (Has(all, "unauthorized") || Has(all, "401") || Has(all, "403") || Has(all, "forbidden") || Has(all, "not enabled"))
+                return "Turn Relay on: open cloud.unity.com, pick this project, Multiplayer > Relay, and turn it on.";
+            if (Has(all, "network") || Has(all, "timeout") || Has(all, "timed out") || Has(all, "resolve host"))
+                return "No internet. Check the Wi-Fi and try again.";
+            if (Has(all, "join code") || Has(all, "not found") || Has(all, "404"))
+                return "That code did not work. Check it with the host and try again.";
+            string message = Deepest(ex).Message ?? "Online failed.";
             if (message.Length > 160) message = message.Substring(0, 160);
             return message;
+        }
+
+        static bool Has(string text, string part) => text.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0;
+
+        static string AllMessages(Exception ex)
+        {
+            var text = new System.Text.StringBuilder();
+            AddMessages(ex, text, 0);
+            return text.ToString();
+        }
+
+        static void AddMessages(Exception ex, System.Text.StringBuilder text, int depth)
+        {
+            if (ex == null || depth > 8) return;
+            text.Append(ex.Message).Append(' ');
+            if (ex is AggregateException group)
+                foreach (var inner in group.InnerExceptions) AddMessages(inner, text, depth + 1);
+            else
+                AddMessages(ex.InnerException, text, depth + 1);
+        }
+
+        static Exception Deepest(Exception ex)
+        {
+            while (true)
+            {
+                if (ex is AggregateException group && group.InnerExceptions.Count > 0) ex = group.InnerExceptions[0];
+                else if (ex.InnerException != null) ex = ex.InnerException;
+                else return ex;
+            }
         }
 
         void BindHost(Allocation allocation)
