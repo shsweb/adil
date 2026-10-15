@@ -21,7 +21,7 @@ one round inflatable raft, and fart it down floating water slides high above the
   - **RACE**: your raft only.
   - **TEAM**: a yellow raft, driven by the game, races the same course. First to the finish wins.
   - **RUMBLE**: both rafts start on a round island. Push the yellow one off. If you fall off, you lose.
-- **5 stages**, picked with the stage cards in the lobby. Each card shows a little map of that course. **NEXT STAGE** on the finish screen goes to the next one:
+- **5 stages**, picked with the stage cards in the lobby. Each card shows a photo of that course, taken by the builder when it builds the stage. **NEXT STAGE** on the finish screen goes to the next one:
   1. **Sunny Slides**: 4 slides and 4 pools, 7 checkpoints. Warm-up.
   2. **Jungle Rapids**: longer, with sliding blocks, more buoys and spinners. 6 checkpoints.
   3. **Volcano Run**: steepest and busiest, with pendulums, four-arm spinners and more open edges. 8 checkpoints.
@@ -42,7 +42,7 @@ one round inflatable raft, and fart it down floating water slides high above the
   - **SOLO**, **2**, **3** and **4** pick how many people play on this phone. Tapping **+ JOIN** on an empty spot does the same, and tapping the last player's tag removes them. The choice is saved.
   - **< >** under each animal picks the character (capy, penguin, croc, gorilla, hippo). Each animal has its own fart pitch
     and fart cloud color, farts now and then while waiting and dances when picked. Picks are saved.
-  - **CHOOSE STAGE** cards along the bottom show a map of each course, **PLAY!** bottom right.
+  - **CHOOSE STAGE** cards along the bottom show a photo of each course, **PLAY!** bottom right.
   - **SETTINGS**: mode Easy/Hard, music on/off, sound on/off.
 - **Music**: a happy lobby song and one song per stage (CC0, see `Audio/Music/CREDITS.txt`). It speeds up a little
   near the finish and stops when you cross the line.

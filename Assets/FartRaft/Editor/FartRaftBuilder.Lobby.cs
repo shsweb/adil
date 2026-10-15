@@ -315,20 +315,24 @@ namespace FartRaft.EditorTools
                 var highlight = real ? Box(card, "Highlight", center, Vector2.zero, new Vector2(cardW + 16f, cardH + 16f), new Color(0.95f, 0.25f, 0.55f)) : null;
                 Color face = real ? Color.Lerp(Stages[k].skyTint, Stages[k].slideBody, 0.5f) : new Color(0.45f, 0.45f, 0.48f);
                 var faceRt = Box(card, "Face", center, Vector2.zero, new Vector2(cardW, cardH), face);
-                var stripe = Box(faceRt, "Stripe", new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(cardW - 16f, 64f), new Color(0.1f, 0.1f, 0.15f, 0.75f));
-                var title = Label(stripe, "Title", real ? Stages[k].name : ComingSoonStages[k - Stages.Length], 30, center, Vector2.zero, new Vector2(cardW - 24f, 60f));
-                title.color = real ? new Color(1f, 0.92f, 0.3f) : new Color(0.8f, 0.8f, 0.8f);
-                FitText(title, 16, 30);
-                Label(faceRt, "Number", real ? "STAGE " + (k + 1) : "COMING SOON", real ? 34 : 26, new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(cardW - 20f, 50f));
                 if (real)
                 {
-                    var map = UIObject("Map", faceRt);
-                    Place(map, center, new Vector2(0f, 8f), new Vector2(cardW - 28f, 78f));
-                    var raw = map.gameObject.AddComponent<RawImage>();
-                    raw.texture = StageMap(Stages[k]);
-                    raw.color = new Color(1f, 1f, 1f, 0.95f);
+                    // A photo of the real course, clipped to the rounded card.
+                    var photoMask = Box(faceRt, "Photo", center, Vector2.zero, new Vector2(cardW - 10f, cardH - 10f), Color.white);
+                    photoMask.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+                    var photo = UIObject("Image", photoMask);
+                    Stretch(photo);
+                    var raw = photo.gameObject.AddComponent<RawImage>();
+                    raw.texture = AssetDatabase.LoadAssetAtPath<Texture2D>(StageCardPath(Stages[k]));
                     raw.raycastTarget = false;
                 }
+                var stripe = Box(faceRt, "Stripe", new Vector2(0.5f, 0f), new Vector2(0f, 30f), new Vector2(cardW - 10f, 48f), new Color(0.08f, 0.08f, 0.12f, 0.8f));
+                var title = Label(stripe, "Title", real ? Stages[k].name : ComingSoonStages[k - Stages.Length], 30, center, Vector2.zero, new Vector2(cardW - 24f, 44f));
+                title.color = real ? new Color(1f, 0.92f, 0.3f) : new Color(0.8f, 0.8f, 0.8f);
+                FitText(title, 16, 30);
+                var badge = Box(faceRt, "Badge", new Vector2(0f, 1f), new Vector2(62f, -24f), new Vector2(112f, 36f), new Color(0.08f, 0.08f, 0.12f, 0.8f));
+                var number = Label(badge, "Number", real ? "STAGE " + (k + 1) : "SOON", 24, center, Vector2.zero, new Vector2(108f, 34f));
+                FitText(number, 14, 24);
 
                 if (!real) continue;
                 var button = card.gameObject.AddComponent<Button>();
@@ -458,6 +462,44 @@ namespace FartRaft.EditorTools
             return LoadMusic(name);
         }
 
+        static string StageCardPath(Stage st) => GeneratedFolder + "/" + st.name.Replace(" ", "") + "Map.png";
+
+        const int PhotoWidth = 480;
+        const int PhotoHeight = 320;
+
+        // A drone shot of the course for its lobby card: from behind and above the start, looking down the slides.
+        // It overwrites the drawn map at the same path, so every stage's lobby picks up the photo.
+        static void CaptureStagePhoto(Track tr)
+        {
+            var camGo = new GameObject("CardCamera");
+            var cam = camGo.AddComponent<Camera>();
+            cam.fieldOfView = 50f;
+            cam.nearClipPlane = 0.5f;
+            cam.farClipPlane = 800f;
+            cam.clearFlags = CameraClearFlags.Skybox;
+            int look = Mathf.Min(tr.Count - 1, Mathf.RoundToInt(tr.Count * 0.3f));
+            cam.transform.position = tr.pos[0] - tr.forward[0] * 30f + Vector3.up * 38f;
+            cam.transform.LookAt(tr.pos[look]);
+
+            var rt = new RenderTexture(PhotoWidth, PhotoHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB) { antiAliasing = 4 };
+            cam.targetTexture = rt;
+            cam.Render();
+            var previous = RenderTexture.active;
+            RenderTexture.active = rt;
+            var tex = new Texture2D(PhotoWidth, PhotoHeight, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, PhotoWidth, PhotoHeight), 0, 0);
+            tex.Apply();
+            RenderTexture.active = previous;
+            cam.targetTexture = null;
+
+            string path = StageCardPath(stage);
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            Object.DestroyImmediate(rt);
+            Object.DestroyImmediate(camGo);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+        }
+
         static Texture2D StageMap(Stage st)
         {
             // Wide, like the card. The course runs left (start) to right (finish)
@@ -518,7 +560,7 @@ namespace FartRaft.EditorTools
             var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
             tex.SetPixels(pixels);
             tex.Apply();
-            string path = GeneratedFolder + "/" + st.name.Replace(" ", "") + "Map.png";
+            string path = StageCardPath(st);
             File.WriteAllBytes(path, tex.EncodeToPNG());
             Object.DestroyImmediate(tex);
             AssetDatabase.ImportAsset(path);

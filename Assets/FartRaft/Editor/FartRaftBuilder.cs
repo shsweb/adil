@@ -76,6 +76,9 @@ namespace FartRaft.EditorTools
             AssetDatabase.DeleteAsset(ScenesFolder + "/Game.unity");
             // Generated meshes and the physics material are shared by all stages, so caches are reset only once.
             ResetCaches();
+            // Every lobby shows a card for every stage, but a stage's photo only exists once that stage is built.
+            // Start with a simple drawn map; each stage then overwrites its picture with a real photo.
+            for (int i = 0; i < Stages.Length; i++) StageMap(Stages[i]);
 
             var buildScenes = new List<EditorBuildSettingsScene>();
             for (int i = 0; i < Stages.Length; i++)
@@ -115,6 +118,7 @@ namespace FartRaft.EditorTools
             var course = BuildCourse(track, m, random, out Transform startPoint, out int checkpointCount);
             BuildEnvironment(track, course, m, random);
             OptimizeStatic(course);
+            CaptureStagePhoto(track);
 
             var raft = BuildRaft(m, startPoint, out FartSeat[] seats);
             var rival = BuildRival(m, startPoint, out FartSeat[] rivalSeats, out RivalDriver rivalDriver);
