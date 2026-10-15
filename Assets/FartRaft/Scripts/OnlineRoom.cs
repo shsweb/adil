@@ -159,7 +159,7 @@ namespace FartRaft
 
         void BindHost(Allocation allocation)
         {
-            var serverData = AllocationUtils.ToRelayServerData(allocation, "dtls");
+            var serverData = ServerData(allocation.ServerEndpoints, allocation.AllocationIdBytes, allocation.ConnectionData, allocation.ConnectionData, allocation.Key);
             var settings = new NetworkSettings();
             settings.WithRelayParameters(ref serverData);
             driver = NetworkDriver.Create(settings);
@@ -169,13 +169,35 @@ namespace FartRaft
 
         void BindClient(JoinAllocation allocation)
         {
-            var serverData = AllocationUtils.ToRelayServerData(allocation, "dtls");
+            var serverData = ServerData(allocation.ServerEndpoints, allocation.AllocationIdBytes, allocation.ConnectionData, allocation.HostConnectionData, allocation.Key);
             var settings = new NetworkSettings();
             settings.WithRelayParameters(ref serverData);
             driver = NetworkDriver.Create(settings);
             if (driver.Bind(NetworkEndpoint.AnyIpv4) != 0)
                 throw new InvalidOperationException("Could not join the room.");
             server = driver.Connect();
+        }
+
+        static RelayServerData ServerData(System.Collections.Generic.List<RelayServerEndpoint> endpoints, byte[] allocationId, byte[] connectionData, byte[] hostConnectionData, byte[] key)
+        {
+            RelayServerEndpoint chosen = null;
+            if (endpoints != null)
+            {
+                foreach (var endpoint in endpoints)
+                {
+                    if (endpoint.ConnectionType == "dtls") { chosen = endpoint; break; }
+                }
+                if (chosen == null)
+                {
+                    foreach (var endpoint in endpoints)
+                    {
+                        if (endpoint.ConnectionType == "udp") { chosen = endpoint; break; }
+                    }
+                }
+                if (chosen == null && endpoints.Count > 0) chosen = endpoints[0];
+            }
+            if (chosen == null) throw new InvalidOperationException("Relay did not return a server.");
+            return new RelayServerData(chosen.Host, (ushort)chosen.Port, allocationId, connectionData, hostConnectionData, key, chosen.Secure);
         }
 
         void Update()
