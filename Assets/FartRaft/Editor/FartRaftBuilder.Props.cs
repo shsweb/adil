@@ -9,7 +9,7 @@ namespace FartRaft.EditorTools
     // Models from Asset Store packs imported into this Unity project (they are not part of the repo).
     // Every set is optional: when a pack is missing the builder falls back to its own primitive props.
     //   EmbersStorm - Free Nature Pack, ArchiBoxCo Nature Pack, YGS Beach Party & Fun Pack, Quirky Series (FREE),
-    //   Low Poly Tropical Island Lite (palms, plants, rocks, pier, tent, chest, barrels).
+    //   Low Poly Tropical Island Lite (palms, plants, rocks, pier, tent, chest, barrels), Low Poly Nature Pack Lite.
     public static partial class FartRaftBuilder
     {
         class StageProps
@@ -34,6 +34,7 @@ namespace FartRaft.EditorTools
         static void ResetPropCaches()
         {
             prefabPaths = null;
+            quirkyAnimals = null;
             convertedMaterials.Clear();
             convertedCounter = 0;
             loggedCharacters = -1;
@@ -95,6 +96,13 @@ namespace FartRaft.EditorTools
             var tropPlants = Named(tropical, "plant");
             var tropRocks = Named(tropical, "rock");
             var tropParty = Named(tropical, "barrel", "chest", "tent", "plank", "skull");
+            // Low Poly Nature Pack Lite (itch.io, CC0). The folder name differs between downloads.
+            var lowPoly = Join(Prefabs("lowpolynature"), Prefabs("low poly nature"));
+            var lpTrees = Named(lowPoly, "tree", "pine", "birch", "oak", "spruce");
+            var lpBushes = Named(lowPoly, "bush", "plant", "grass", "fern");
+            var lpFlowers = Named(lowPoly, "flower", "mushroom");
+            var lpRocks = Named(lowPoly, "rock", "stone", "boulder");
+
             var animals = Prefabs("quirky series", "/prefabs/").Where(g =>
             {
                 string path = AssetDatabase.GetAssetPath(g).ToLowerInvariant();
@@ -110,25 +118,25 @@ namespace FartRaft.EditorTools
             switch (index)
             {
                 case 0:
-                    props.trees = Join(palms, oak, archiTrees);
-                    props.bushes = Join(tropPlants, bushes);
-                    props.flowers = Join(flowers, mushrooms);
-                    props.rocks = Join(tropRocks, rocks);
+                    props.trees = Join(palms, oak, archiTrees, lpTrees);
+                    props.bushes = Join(tropPlants, bushes, lpBushes);
+                    props.flowers = Join(flowers, mushrooms, lpFlowers);
+                    props.rocks = Join(tropRocks, rocks, lpRocks);
                     props.decor = Join(tropParty, Named(beach, "umbella", "umbrella", "chair", "sand castle", "surfboard", "sea star", "bucket"));
                     props.animals = animals.Where(a => a != props.fish).ToArray();
                     break;
                 case 1:
-                    props.trees = Join(palms, pine, oak);
-                    props.bushes = Join(tropPlants, bushes, plants);
-                    props.flowers = Join(mushrooms, grass);
-                    props.rocks = Join(tropRocks, rocks);
+                    props.trees = Join(palms, pine, oak, lpTrees);
+                    props.bushes = Join(tropPlants, bushes, plants, lpBushes);
+                    props.flowers = Join(mushrooms, grass, lpFlowers);
+                    props.rocks = Join(tropRocks, rocks, lpRocks);
                     props.decor = tropParty;
                     props.animals = Named(animals, "colobus", "gecko", "taipan", "sparrow", "pudu", "muskrat");
                     break;
                 default:
                     props.trees = deadTrees;
                     props.bushes = Join(deadBushes, tropPlants);
-                    props.rocks = Join(tropRocks, rocks);
+                    props.rocks = Join(tropRocks, rocks, lpRocks);
                     props.decor = Named(tropical, "skull", "barrel");
                     props.animals = Named(animals, "gecko", "taipan", "muskrat");
                     break;
@@ -142,7 +150,8 @@ namespace FartRaft.EditorTools
 
             Debug.Log($"[Fart Raft] Stage {index + 1} props: {props.trees.Length} trees, {props.bushes.Length} bushes, " +
                       $"{props.flowers.Length} flowers, {props.rocks.Length} rocks, {props.decor.Length} beach props, " +
-                      $"{props.animals.Length} animals, beach ball {(props.beachBall != null ? "yes" : "no")}, fish {(props.fish != null ? "yes" : "no")}.");
+                      $"{props.animals.Length} animals, beach ball {(props.beachBall != null ? "yes" : "no")}, fish {(props.fish != null ? "yes" : "no")}, " +
+                      $"Low Poly Nature Pack {lowPoly.Length} models.");
         }
 
         static GameObject Pick(GameObject[] set, System.Random random) =>
@@ -228,9 +237,21 @@ namespace FartRaft.EditorTools
             var shader = mat.shader;
             if (shader == null || !shader.isSupported || shader.name == "Hidden/InternalErrorShader") return true;
             string name = shader.name;
-            if (srp) return name == "Standard" || name == "Standard (Specular setup)" || name.StartsWith("Legacy Shaders/") || name.StartsWith("Mobile/");
+            // Under URP anything not written for URP draws pink, including custom Built-in shaders that
+            // still report isSupported (that is what turned some Quirky animals pink). URP shaders, Shader
+            // Graphs included, tag their active SubShader with RenderPipeline = UniversalPipeline.
+            if (srp)
+            {
+                if (SrpShaderPrefixes.Any(name.StartsWith)) return false;
+                return mat.GetTag("RenderPipeline", false).IndexOf("universal", System.StringComparison.OrdinalIgnoreCase) < 0;
+            }
             return name.StartsWith("Universal Render Pipeline/");
         }
+
+        static readonly string[] SrpShaderPrefixes =
+        {
+            "Universal Render Pipeline/", "Sprites/", "UI/", "Skybox/", "TextMeshPro/", "GUI/", "Hidden/",
+        };
 
         static Material Converted(Material source)
         {
