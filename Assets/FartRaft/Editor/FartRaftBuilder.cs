@@ -670,8 +670,7 @@ namespace FartRaft.EditorTools
             floorMesh.RecalculateBounds();
             SaveMesh(floorMesh);
 
-            var water = MeshObject(floorMesh, "SlideWater", parent, Vector3.zero, Vector3.one,
-                theme.waterMaterial != null ? theme.waterMaterial : m.slideWater);
+            var water = MeshObject(floorMesh, "SlideWater", parent, Vector3.zero, Vector3.one, SlideWater(m));
             water.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
             var floorCollider = water.AddComponent<MeshCollider>();
             floorCollider.sharedMesh = floorMesh;
@@ -983,7 +982,7 @@ namespace FartRaft.EditorTools
             var lightGo = new GameObject("Sun");
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.05f;
+            light.intensity = 0.9f;
             light.shadows = LightShadows.Soft;
             light.shadowStrength = 0.62f;
             light.color = stage.sun;
@@ -1011,7 +1010,8 @@ namespace FartRaft.EditorTools
 
             RenderSettings.sun = light;
             RenderSettings.ambientMode = AmbientMode.Skybox;
-            RenderSettings.ambientIntensity = 1.05f;
+            // A painted sky is much brighter than the old flat sky. A high ambient washes the cliffs and water out to white.
+            RenderSettings.ambientIntensity = fantasy != null ? 0.38f : 0.85f;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = stage.fog;
@@ -1763,7 +1763,7 @@ namespace FartRaft.EditorTools
         class Mats
         {
             // Stage colors; every stage gets its own copy of these materials.
-            public readonly Material slideWater = Textured(stagePrefix + "SlideWater", WaterTexture(), new Color(0.92f, 0.96f, 1f), 0.84f);
+            public readonly Material slideWater = WaterMaterial(stagePrefix + "SlideWater", WaterTexture(), stage.waterLight);
             public readonly Material slideBody = Lit(stagePrefix + "SlideBody", stage.slideBody, 0.3f);
             public readonly Material bumper = Lit(stagePrefix + "Bumper", stage.bumper, 0.3f);
             public readonly Material coral = Lit(stagePrefix + "Coral", stage.coral, 0.05f);
@@ -1844,13 +1844,36 @@ namespace FartRaft.EditorTools
             return mat;
         }
 
-        static Material Textured(string name, Texture2D texture, Color color, float smoothness)
+        static Material Textured(string name, Texture texture, Color color, float smoothness)
         {
             var mat = Lit(name, color, smoothness);
             mat.mainTexture = texture;
             if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", texture);
             EditorUtility.SetDirty(mat);
             return mat;
+        }
+
+        // Cartoon water: the painted blue shows through. A shiny surface was mirroring the bright sky and turning white.
+        static Material WaterMaterial(string name, Texture texture, Color tint)
+        {
+            var mat = Textured(name, texture, tint, 0.18f);
+            if (mat.HasProperty("_EnvironmentReflections")) mat.SetFloat("_EnvironmentReflections", 0f);
+            if (mat.HasProperty("_SpecularHighlights")) mat.SetFloat("_SpecularHighlights", 0f);
+            mat.EnableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+            mat.EnableKeyword("_SPECULARHIGHLIGHTS_OFF");
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material SlideWater(Mats m)
+        {
+            var custom = theme.waterMaterial;
+            if (custom != null && custom.shader != null && custom.shader.isSupported && custom.shader.name != "Hidden/InternalErrorShader")
+            {
+                Debug.Log("[Fart Raft] Slide water uses EnvironmentTheme material '" + custom.name + "'. Clear that slot to use the built-in blue water.");
+                return custom;
+            }
+            return m.slideWater;
         }
 
         // Sprites/Default is unlit, transparent and works in Built-in and URP.
@@ -1975,8 +1998,8 @@ namespace FartRaft.EditorTools
             AssetDatabase.CreateAsset(profile, GeneratedFolder + "/" + stagePrefix + "PostProcessing.asset");
 
             AddOverride(profile, "UnityEngine.Rendering.Universal.Tonemapping", ("mode", "Neutral"));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.4f), ("threshold", 1f), ("scatter", 0.6f));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.ColorAdjustments", ("postExposure", 0.2f), ("contrast", 8f), ("saturation", 22f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.2f), ("threshold", 1.15f), ("scatter", 0.55f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.ColorAdjustments", ("postExposure", -0.15f), ("contrast", 6f), ("saturation", 16f));
             AddOverride(profile, "UnityEngine.Rendering.Universal.Vignette", ("intensity", 0.18f), ("smoothness", 0.4f));
             EditorUtility.SetDirty(profile);
 

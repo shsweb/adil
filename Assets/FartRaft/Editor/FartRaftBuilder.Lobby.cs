@@ -152,7 +152,7 @@ namespace FartRaft.EditorTools
 
         static Material LobbyPoolMaterial(Mats m)
         {
-            var pool = Lit(stagePrefix + "LobbyPool", new Color(0.82f, 0.95f, 1f), 0.9f);
+            var pool = WaterMaterial(stagePrefix + "LobbyPool", m.slideWater.mainTexture, stage.waterLight);
             var texture = m.slideWater.mainTexture;
             pool.mainTexture = texture;
             if (pool.HasProperty("_BaseMap")) pool.SetTexture("_BaseMap", texture);
