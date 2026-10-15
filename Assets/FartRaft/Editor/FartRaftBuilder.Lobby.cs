@@ -328,8 +328,21 @@ namespace FartRaft.EditorTools
             }
 
             manager.playButton = MakeButton(lobby, "Play", "PLAY!", new Vector2(1f, 0f), new Vector2(-220f, 140f), new Vector2(360f, 200f), new Color(0.35f, 0.8f, 0.25f), 86);
-            var hint = Label(lobby, "Hint", "Tap + JOIN to add friends - everyone plays on this phone!", 28, center, new Vector2(150f, -238f), new Vector2(760f, 50f));
-            hint.alignment = TextAnchor.MiddleLeft;
+
+            // SOLO / 2 / 3 / 4, on the same row as CHOOSE STAGE.
+            string[] countLabels = { "SOLO", "2", "3", "4" };
+            const float countW = 156f, countH = 78f, countGap = 12f;
+            float countX = -162f;
+            manager.countButtons = new Button[4];
+            for (int i = 0; i < 4; i++)
+            {
+                var button = MakeButton(lobby, "Count" + (i + 1), countLabels[i], center,
+                    new Vector2(countX + i * (countW + countGap), -230f), new Vector2(countW, countH),
+                    new Color(0.22f, 0.24f, 0.34f, 0.96f), i == 0 ? 34 : 42);
+                var label = button.GetComponentInChildren<Text>();
+                if (label != null) FitText(label, 22, i == 0 ? 34 : 42);
+                manager.countButtons[i] = button;
+            }
         }
 
         // Shrinks the text until it fits its box on one or two lines.

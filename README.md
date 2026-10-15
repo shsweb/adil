@@ -30,7 +30,7 @@ one round inflatable raft, and fart it down floating water slides high above the
 - HUD: progress bar, timer, death counter and name tags over each animal.
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
 - **Lobby** (like Fart Together): the animals stand in a row on a wooden deck in a jungle clearing, with a pool, floats and a little raft behind them.
-  - Tap **+ JOIN** over an empty spot to add a player (1-4 players, solo works too); tap the last player's tag to remove them.
+  - **SOLO**, **2**, **3** and **4** pick how many people play on this phone. Tapping **+ JOIN** on an empty spot does the same, and tapping the last player's tag removes them. The choice is saved.
   - **< >** under each animal picks the character (capy, penguin, croc, gorilla). Each animal has its own fart pitch
     and fart cloud color, farts now and then while waiting and dances when picked. Picks are saved.
   - **CHOOSE STAGE** cards along the bottom (Ice World and Sewer Splash are marked *coming soon*), **PLAY!** bottom right.

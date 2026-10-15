@@ -60,6 +60,7 @@ namespace FartRaft
         public Button[] characterNextButtons = new Button[4];
         public Button[] stageCards = new Button[0];
         public GameObject[] stageHighlights = new GameObject[0];
+        public Button[] countButtons = new Button[4];
         public Button playButton;
 
         [Header("Settings")]
@@ -164,6 +165,14 @@ namespace FartRaft
                 if (stageCards[i] != null && i < stageNames.Length) stageCards[i].onClick.AddListener(() => PickStage(stage));
             }
             if (playButton != null) playButton.onClick.AddListener(() => StartGame(playerCount));
+            if (countButtons != null)
+            {
+                for (int i = 0; i < countButtons.Length; i++)
+                {
+                    int count = i + 1;
+                    if (countButtons[i] != null) countButtons[i].onClick.AddListener(() => SetPlayerCount(count));
+                }
+            }
 
             if (settingsButton != null) settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
             if (settingsCloseButton != null) settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));
@@ -204,15 +213,23 @@ namespace FartRaft
         // Slots fill from the left: tapping an empty slot joins everyone up to it, tapping the last player removes them.
         void ToggleJoin(int player)
         {
-            int count;
-            if (player >= playerCount) count = player + 1;
-            else if (player > 0 && player == playerCount - 1) count = player;
-            else return;
-            bool joined = count > playerCount;
+            if (player >= playerCount) SetPlayerCount(player + 1);
+            else if (player > 0 && player == playerCount - 1) SetPlayerCount(player);
+        }
+
+        void SetPlayerCount(int count)
+        {
+            count = Mathf.Clamp(count, 1, seats.Length);
+            bool grow = count > playerCount;
+            int from = playerCount;
             playerCount = count;
             GameSettings.Players = count;
             UpdateLobby();
-            if (joined && Has(lobbyAvatars, player)) lobbyAvatars[player].Cheer();
+            if (!grow) return;
+            for (int i = from; i < count; i++)
+            {
+                if (Has(lobbyAvatars, i)) lobbyAvatars[i].Cheer();
+            }
         }
 
         void UpdateLobby()
@@ -224,6 +241,19 @@ namespace FartRaft
                 if (Has(pickers, i)) pickers[i].SetActive(joined);
                 if (Has(joinedMarks, i)) joinedMarks[i].SetActive(joined);
                 if (Has(joinTexts, i)) joinTexts[i].text = joined ? (i == 0 ? "YOU" : "PLAYER " + (i + 1)) : "+ JOIN";
+            }
+            if (countButtons != null)
+            {
+                var selected = new Color(0.35f, 0.8f, 0.25f);
+                var idle = new Color(0.22f, 0.24f, 0.34f, 0.96f);
+                for (int i = 0; i < countButtons.Length; i++)
+                {
+                    if (countButtons[i] == null) continue;
+                    bool on = playerCount == i + 1;
+                    var image = countButtons[i].GetComponent<Image>();
+                    if (image != null) image.color = on ? selected : idle;
+                    countButtons[i].transform.localScale = Vector3.one * (on ? 1.08f : 1f);
+                }
             }
             for (int i = 0; i < stageCards.Length; i++)
             {
