@@ -245,8 +245,9 @@ namespace FartRaft.EditorTools
             public System.Action<Transform, Mats, Track, System.Random> obstacles;
             public float drag = 0.18f;
 
-            public Color slideBody, bumper, coral, coral2, coral3, grass, leaves, leaves2;
+            public Color slideBody, rim, bumper, coral, coral2, coral3, grass, leaves, leaves2;
             public Color waterDeep, waterLight;
+            // Sky: skyTint at the top, fog at the horizon. skyGround is the light bounced up from below.
             public Color skyTint, skyGround, fog, ambient, sun;
         }
 
@@ -286,21 +287,22 @@ namespace FartRaft.EditorTools
                 checkpoints = new[] { 2, 3, 5, 6, 7, 9, 10 },
                 finishSegment = 11,
                 obstacles = SunnyObstacles,
-                slideBody = new Color(0.30f, 0.78f, 0.72f),
-                bumper = new Color(0.62f, 0.32f, 0.85f),
-                coral = new Color(0.95f, 0.50f, 0.43f),
-                coral2 = new Color(0.98f, 0.64f, 0.50f),
-                coral3 = new Color(0.88f, 0.42f, 0.40f),
-                grass = new Color(0.50f, 0.80f, 0.30f),
-                leaves = new Color(0.30f, 0.62f, 0.25f),
-                leaves2 = new Color(0.45f, 0.72f, 0.25f),
-                waterDeep = new Color(0.16f, 0.62f, 0.94f),
-                waterLight = new Color(0.55f, 0.85f, 1f),
-                skyTint = new Color(0.42f, 0.62f, 0.95f),
-                skyGround = new Color(0.45f, 0.68f, 0.92f),
-                fog = new Color(0.55f, 0.75f, 0.95f),
-                ambient = new Color(0.75f, 0.85f, 1f),
-                sun = new Color(1f, 0.96f, 0.9f),
+                slideBody = new Color(0.98f, 0.67f, 0.44f),
+                rim = new Color(0.56f, 0.82f, 0.32f),
+                bumper = new Color(0.72f, 0.38f, 0.8f),
+                coral = new Color(0.91f, 0.53f, 0.49f),
+                coral2 = new Color(0.96f, 0.67f, 0.59f),
+                coral3 = new Color(0.85f, 0.45f, 0.45f),
+                grass = new Color(0.96f, 0.8f, 0.62f),
+                leaves = new Color(0.36f, 0.7f, 0.32f),
+                leaves2 = new Color(0.52f, 0.78f, 0.3f),
+                waterDeep = new Color(0.16f, 0.58f, 0.95f),
+                waterLight = new Color(0.4f, 0.78f, 1.0f),
+                skyTint = new Color(0.58f, 0.8f, 0.98f),
+                skyGround = new Color(0.96f, 0.8f, 0.62f),
+                fog = new Color(0.86f, 0.93f, 1.0f),
+                ambient = new Color(0.8f, 0.86f, 0.95f),
+                sun = new Color(1.0f, 0.97f, 0.92f),
             },
             new Stage
             {
@@ -330,21 +332,22 @@ namespace FartRaft.EditorTools
                 checkpoints = new[] { 3, 5, 7, 9, 11, 13 },
                 finishSegment = 15,
                 obstacles = JungleObstacles,
-                slideBody = new Color(0.62f, 0.45f, 0.26f),
-                bumper = new Color(0.98f, 0.62f, 0.15f),
-                coral = new Color(0.42f, 0.55f, 0.30f),
-                coral2 = new Color(0.52f, 0.62f, 0.34f),
-                coral3 = new Color(0.36f, 0.47f, 0.28f),
-                grass = new Color(0.28f, 0.66f, 0.22f),
-                leaves = new Color(0.16f, 0.48f, 0.18f),
-                leaves2 = new Color(0.34f, 0.64f, 0.18f),
-                waterDeep = new Color(0.08f, 0.60f, 0.60f),
-                waterLight = new Color(0.45f, 0.90f, 0.80f),
-                skyTint = new Color(0.40f, 0.72f, 0.72f),
-                skyGround = new Color(0.30f, 0.58f, 0.50f),
-                fog = new Color(0.52f, 0.78f, 0.72f),
-                ambient = new Color(0.70f, 0.90f, 0.82f),
-                sun = new Color(1f, 0.95f, 0.80f),
+                slideBody = new Color(0.95f, 0.73f, 0.45f),
+                rim = new Color(0.45f, 0.76f, 0.28f),
+                bumper = new Color(0.98f, 0.56f, 0.25f),
+                coral = new Color(0.55f, 0.74f, 0.52f),
+                coral2 = new Color(0.66f, 0.82f, 0.58f),
+                coral3 = new Color(0.46f, 0.65f, 0.47f),
+                grass = new Color(0.5f, 0.8f, 0.34f),
+                leaves = new Color(0.24f, 0.6f, 0.3f),
+                leaves2 = new Color(0.42f, 0.74f, 0.28f),
+                waterDeep = new Color(0.1f, 0.64f, 0.72f),
+                waterLight = new Color(0.4f, 0.88f, 0.84f),
+                skyTint = new Color(0.56f, 0.84f, 0.86f),
+                skyGround = new Color(0.5f, 0.8f, 0.34f),
+                fog = new Color(0.84f, 0.95f, 0.93f),
+                ambient = new Color(0.78f, 0.9f, 0.86f),
+                sun = new Color(1.0f, 0.96f, 0.86f),
             },
             new Stage
             {
@@ -374,21 +377,22 @@ namespace FartRaft.EditorTools
                 checkpoints = new[] { 2, 3, 5, 6, 7, 9, 11, 13 },
                 finishSegment = 15,
                 obstacles = VolcanoObstacles,
-                slideBody = new Color(0.36f, 0.31f, 0.33f),
-                bumper = new Color(0.95f, 0.32f, 0.16f),
-                coral = new Color(0.32f, 0.27f, 0.28f),
-                coral2 = new Color(0.42f, 0.31f, 0.28f),
-                coral3 = new Color(0.24f, 0.21f, 0.23f),
-                grass = new Color(0.90f, 0.42f, 0.12f),
-                leaves = new Color(0.38f, 0.26f, 0.20f),
-                leaves2 = new Color(0.55f, 0.32f, 0.16f),
-                waterDeep = new Color(0.10f, 0.48f, 0.88f),
-                waterLight = new Color(0.50f, 0.78f, 1f),
-                skyTint = new Color(0.95f, 0.50f, 0.35f),
-                skyGround = new Color(0.55f, 0.26f, 0.22f),
-                fog = new Color(0.85f, 0.52f, 0.42f),
-                ambient = new Color(1f, 0.78f, 0.66f),
-                sun = new Color(1f, 0.78f, 0.58f),
+                slideBody = new Color(0.5f, 0.4f, 0.46f),
+                rim = new Color(1.0f, 0.56f, 0.22f),
+                bumper = new Color(0.95f, 0.32f, 0.28f),
+                coral = new Color(0.55f, 0.4f, 0.43f),
+                coral2 = new Color(0.66f, 0.47f, 0.45f),
+                coral3 = new Color(0.44f, 0.33f, 0.38f),
+                grass = new Color(0.99f, 0.55f, 0.22f),
+                leaves = new Color(0.48f, 0.34f, 0.3f),
+                leaves2 = new Color(0.62f, 0.4f, 0.26f),
+                waterDeep = new Color(0.14f, 0.54f, 0.92f),
+                waterLight = new Color(0.46f, 0.8f, 1.0f),
+                skyTint = new Color(0.98f, 0.64f, 0.5f),
+                skyGround = new Color(0.55f, 0.4f, 0.43f),
+                fog = new Color(1.0f, 0.84f, 0.72f),
+                ambient = new Color(1.0f, 0.84f, 0.76f),
+                sun = new Color(1.0f, 0.86f, 0.7f),
             },
             new Stage
             {
@@ -412,21 +416,22 @@ namespace FartRaft.EditorTools
                 finishSegment = 8,
                 obstacles = IceObstacles,
                 drag = 0.04f,
-                slideBody = new Color(0.75f, 0.88f, 0.95f),
-                bumper = new Color(0.35f, 0.55f, 0.95f),
-                coral = new Color(0.82f, 0.88f, 0.94f),
-                coral2 = new Color(0.7f, 0.8f, 0.9f),
-                coral3 = new Color(0.62f, 0.74f, 0.86f),
-                grass = new Color(0.92f, 0.96f, 1f),
-                leaves = new Color(0.45f, 0.62f, 0.72f),
-                leaves2 = new Color(0.7f, 0.82f, 0.9f),
-                waterDeep = new Color(0.15f, 0.45f, 0.85f),
-                waterLight = new Color(0.7f, 0.88f, 1f),
-                skyTint = new Color(0.62f, 0.78f, 0.95f),
-                skyGround = new Color(0.75f, 0.85f, 0.95f),
-                fog = new Color(0.75f, 0.86f, 0.95f),
-                ambient = new Color(0.8f, 0.88f, 1f),
-                sun = new Color(0.9f, 0.95f, 1f),
+                slideBody = new Color(0.8f, 0.9f, 0.98f),
+                rim = new Color(0.96f, 0.98f, 1.0f),
+                bumper = new Color(0.48f, 0.56f, 0.95f),
+                coral = new Color(0.84f, 0.9f, 0.97f),
+                coral2 = new Color(0.93f, 0.96f, 1.0f),
+                coral3 = new Color(0.74f, 0.84f, 0.94f),
+                grass = new Color(0.97f, 0.98f, 1.0f),
+                leaves = new Color(0.42f, 0.62f, 0.7f),
+                leaves2 = new Color(0.66f, 0.8f, 0.88f),
+                waterDeep = new Color(0.2f, 0.56f, 0.92f),
+                waterLight = new Color(0.62f, 0.86f, 1.0f),
+                skyTint = new Color(0.68f, 0.84f, 0.98f),
+                skyGround = new Color(0.92f, 0.96f, 1.0f),
+                fog = new Color(0.9f, 0.95f, 1.0f),
+                ambient = new Color(0.86f, 0.9f, 1.0f),
+                sun = new Color(0.96f, 0.98f, 1.0f),
             },
             new Stage
             {
@@ -449,21 +454,22 @@ namespace FartRaft.EditorTools
                 checkpoints = new[] { 2, 4, 6, 7 },
                 finishSegment = 8,
                 obstacles = SewerObstacles,
-                slideBody = new Color(0.32f, 0.38f, 0.28f),
-                bumper = new Color(0.55f, 0.7f, 0.2f),
-                coral = new Color(0.42f, 0.4f, 0.32f),
-                coral2 = new Color(0.5f, 0.46f, 0.34f),
-                coral3 = new Color(0.34f, 0.32f, 0.26f),
-                grass = new Color(0.28f, 0.4f, 0.18f),
-                leaves = new Color(0.2f, 0.35f, 0.14f),
-                leaves2 = new Color(0.4f, 0.5f, 0.16f),
-                waterDeep = new Color(0.1f, 0.45f, 0.22f),
-                waterLight = new Color(0.45f, 0.75f, 0.35f),
-                skyTint = new Color(0.45f, 0.55f, 0.4f),
-                skyGround = new Color(0.3f, 0.36f, 0.28f),
-                fog = new Color(0.4f, 0.5f, 0.35f),
-                ambient = new Color(0.6f, 0.7f, 0.55f),
-                sun = new Color(0.85f, 0.95f, 0.7f),
+                slideBody = new Color(0.62f, 0.66f, 0.58f),
+                rim = new Color(0.48f, 0.74f, 0.32f),
+                bumper = new Color(0.7f, 0.44f, 0.84f),
+                coral = new Color(0.58f, 0.6f, 0.54f),
+                coral2 = new Color(0.68f, 0.69f, 0.62f),
+                coral3 = new Color(0.48f, 0.51f, 0.46f),
+                grass = new Color(0.52f, 0.66f, 0.42f),
+                leaves = new Color(0.3f, 0.48f, 0.24f),
+                leaves2 = new Color(0.46f, 0.6f, 0.26f),
+                waterDeep = new Color(0.2f, 0.62f, 0.3f),
+                waterLight = new Color(0.55f, 0.88f, 0.45f),
+                skyTint = new Color(0.66f, 0.76f, 0.64f),
+                skyGround = new Color(0.52f, 0.66f, 0.42f),
+                fog = new Color(0.84f, 0.89f, 0.8f),
+                ambient = new Color(0.78f, 0.84f, 0.74f),
+                sun = new Color(0.96f, 1.0f, 0.88f),
             },
         };
 
@@ -834,6 +840,13 @@ namespace FartRaft.EditorTools
             foam.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
         }
 
+        const float WallHeight = 1.2f;
+        const float WallThickness = 0.7f;
+        const float WallHitHeight = 3.2f;
+        const float RimRadius = 0.38f;
+
+        // Water-park walls like Fart Together: smooth sides in the slide color with a round tube on top.
+        // R edges are plain walls, B edges get purple spiky logs in front, O edges stay open.
         static void BuildEdges(Track tr, Transform parent, Mats m, System.Random random)
         {
             var walls = new GameObject("Walls").transform;
@@ -842,6 +855,24 @@ namespace FartRaft.EditorTools
             for (int s = -1; s <= 1; s += 2)
             {
                 string edges = s < 0 ? stage.left : stage.right;
+                int runStart = -1;
+                for (int k = 0; k < tr.Count; k++)
+                {
+                    bool walled = k < tr.Count - 1 && EdgeAt(edges, tr.segment[k]) != Edge.Open;
+                    if (walled && runStart < 0) runStart = k;
+                    if (walled || runStart < 0) continue;
+
+                    var inner = new List<Vector3>();
+                    var outward = new List<Vector3>();
+                    for (int j = runStart; j <= k; j++)
+                    {
+                        inner.Add(tr.Edge(j, s));
+                        outward.Add(tr.right[j] * s);
+                    }
+                    Wall(walls, m, inner, outward);
+                    runStart = -1;
+                }
+
                 for (int k = 0; k < tr.Count - 1; k++)
                 {
                     Edge edge = EdgeAt(edges, tr.segment[k]);
@@ -849,27 +880,129 @@ namespace FartRaft.EditorTools
                     {
                         BumperPiece(walls, m, tr.Edge(k, s), tr.Edge(Mathf.Min(k + 3, tr.Count - 1), s), tr.right[k] * s);
                     }
-                    else if (edge == Edge.Rock && k % 2 == 0)
+                    else if (edge == Edge.Rock && k % 9 == 0 && R(random) < 0.35f)
                     {
-                        Vector3 pos = tr.Edge(k, s) + tr.right[k] * (s * (0.9f + R(random) * 0.5f)) + Vector3.up * 0.2f;
-                        WallRock(walls, m, pos, 2.2f + R(random) * 1.6f, random);
+                        // A few grey boulders leaning on the outside of the wall.
+                        Vector3 pos = tr.Edge(k, s) + tr.right[k] * (s * (WallThickness + 0.9f + R(random) * 0.6f)) - Vector3.up * 0.4f;
+                        var rock = MeshObject(RockMesh(random.Next(3)), "Boulder", walls, pos, Vector3.one * (1.8f + R(random) * 1.4f), R(random) < 0.5f ? m.rock : m.rock2);
+                        rock.transform.rotation = Quaternion.Euler(0f, R(random) * 360f, 0f);
                     }
                 }
             }
 
             // Close the start and the end so the raft cannot slide off backwards or past the finish.
             int last = tr.Count - 1;
-            RockRow(walls, m, tr.Edge(0, -1f) - tr.forward[0], tr.Edge(0, 1f) - tr.forward[0], random);
-            RockRow(walls, m, tr.Edge(last, -1f) + tr.forward[last], tr.Edge(last, 1f) + tr.forward[last], random);
+            EndWall(walls, m, tr.Edge(0, -1f), tr.Edge(0, 1f), -tr.forward[0]);
+            EndWall(walls, m, tr.Edge(last, -1f), tr.Edge(last, 1f), tr.forward[last]);
         }
 
-        static void RockRow(Transform parent, Mats m, Vector3 a, Vector3 b, System.Random random)
+        static void EndWall(Transform parent, Mats m, Vector3 a, Vector3 b, Vector3 outward)
         {
-            float length = Vector3.Distance(a, b);
-            for (float d = 0f; d <= length; d += 2f)
+            // Reach a little past both side walls so the corners are closed.
+            Vector3 along = (b - a).normalized;
+            a -= along * WallThickness;
+            b += along * WallThickness;
+            var inner = new List<Vector3>();
+            var dirs = new List<Vector3>();
+            for (int i = 0; i <= 4; i++)
             {
-                WallRock(parent, m, Vector3.Lerp(a, b, d / length) + Vector3.up * 0.2f, 2.4f + R(random) * 1.2f, random);
+                inner.Add(Vector3.Lerp(a, b, i / 4f));
+                dirs.Add(outward);
             }
+            Wall(parent, m, inner, dirs);
+        }
+
+        static void Wall(Transform parent, Mats m, List<Vector3> inner, List<Vector3> outward)
+        {
+            int n = inner.Count;
+            if (n < 2) return;
+            var verts = new List<Vector3>();
+            var tris = new List<int>();
+            var hitVerts = new List<Vector3>();
+            var hitTris = new List<int>();
+            var rimPath = new List<Vector3>();
+            Vector3 up = Vector3.up;
+            Vector3 bottom = Vector3.down * 1.4f;
+            Vector3 sink = Vector3.down * 0.2f;
+            Vector3 top = up * WallHeight;
+            Vector3 hitTop = up * WallHitHeight;
+
+            for (int i = 0; i < n; i++)
+            {
+                rimPath.Add(inner[i] + outward[i] * (WallThickness * 0.5f) + top);
+            }
+            for (int i = 0; i < n - 1; i++)
+            {
+                Vector3 a = inner[i], b = inner[i + 1];
+                Vector3 ao = a + outward[i] * WallThickness, bo = b + outward[i + 1] * WallThickness;
+                Vector3 face = (outward[i] + outward[i + 1]).normalized;
+                AddQuad(verts, tris, a + sink, b + sink, b + top, a + top, -face);
+                AddQuad(verts, tris, a + top, b + top, bo + top, ao + top, up);
+                AddQuad(verts, tris, ao + top, bo + top, bo + bottom, ao + bottom, face);
+
+                // The bumper is taller than the wall, so a raft flying off the jump ramp cannot hop over.
+                Vector3 ah = a + outward[i] * 0.3f, bh = b + outward[i + 1] * 0.3f;
+                AddQuad(hitVerts, hitTris, a + sink, b + sink, b + hitTop, a + hitTop, -face);
+                AddQuad(hitVerts, hitTris, a + hitTop, b + hitTop, bh + hitTop, ah + hitTop, up);
+                AddQuad(hitVerts, hitTris, ah + hitTop, bh + hitTop, bh + sink, ah + sink, face);
+            }
+            for (int end = 0; end < 2; end++)
+            {
+                int i = end == 0 ? 0 : n - 1;
+                Vector3 along = end == 0 ? inner[0] - inner[1] : inner[n - 1] - inner[n - 2];
+                Vector3 a = inner[i], ao = a + outward[i] * WallThickness;
+                AddQuad(verts, tris, a + sink, ao + bottom, ao + top, a + top, along);
+            }
+
+            var wall = MeshObject(BuildFlatMesh("Wall", verts, tris), "Wall", parent, Vector3.zero, Vector3.one, m.slideBody);
+            var hit = new GameObject("WallHit");
+            hit.transform.SetParent(wall.transform, false);
+            var collider = hit.AddComponent<MeshCollider>();
+            collider.sharedMesh = BuildFlatMesh("WallHit", hitVerts, hitTris);
+            hit.AddComponent<Bumper>().bounce = 3f;
+
+            MeshObject(TubeMesh("Rim", rimPath, RimRadius, 10), "Rim", wall.transform, Vector3.zero, Vector3.one, m.rim);
+            Prim(PrimitiveType.Sphere, "RimEnd", wall.transform, rimPath[0], Vector3.one * RimRadius * 2f, m.rim, false);
+            Prim(PrimitiveType.Sphere, "RimEnd", wall.transform, rimPath[n - 1], Vector3.one * RimRadius * 2f, m.rim, false);
+        }
+
+        // A round tube along a path (smooth shading). Used for the rim on top of the walls.
+        static Mesh TubeMesh(string name, List<Vector3> path, float radius, int sides)
+        {
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            for (int i = 0; i < path.Count; i++)
+            {
+                Vector3 forward = path[Mathf.Min(i + 1, path.Count - 1)] - path[Mathf.Max(i - 1, 0)];
+                forward.y = 0f;
+                forward.Normalize();
+                Vector3 side = Vector3.Cross(Vector3.up, forward).normalized;
+                for (int j = 0; j < sides; j++)
+                {
+                    float a = j * Mathf.PI * 2f / sides;
+                    vertices.Add(path[i] + (side * Mathf.Cos(a) + Vector3.up * Mathf.Sin(a)) * radius);
+                }
+            }
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                for (int j = 0; j < sides; j++)
+                {
+                    int a = i * sides + j;
+                    int b = i * sides + (j + 1) % sides;
+                    int c = a + sides;
+                    int d = b + sides;
+                    Vector3 outward = vertices[a] - path[i];
+                    AddIndexedTriangle(vertices, triangles, a, c, b, outward);
+                    AddIndexedTriangle(vertices, triangles, b, c, d, outward);
+                }
+            }
+            var mesh = new Mesh { name = name };
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            SaveMesh(mesh);
+            return mesh;
         }
 
         static void BumperPiece(Transform parent, Mats m, Vector3 a, Vector3 b, Vector3 outward)
@@ -1097,80 +1230,85 @@ namespace FartRaft.EditorTools
 
         // ================================================================ Environment
 
+        // Soft, bright cartoon light: a clean gradient sky, gentle shadows and even fill light,
+        // so the pastel colors stay clean like Fart Together.
         static void SetupLighting()
         {
             var lightGo = new GameObject("Sun");
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 0.9f;
+            light.intensity = 1.1f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.62f;
+            light.shadowStrength = 0.45f;
             light.color = stage.sun;
             // The light shines from the camera side, so faces are lit and shadows fall behind the animals.
             lightGo.transform.rotation = Quaternion.Euler(50f, -28f, 0f);
 
-            var fantasy = FindFantasySkybox();
-            if (fantasy != null)
-            {
-                RenderSettings.skybox = fantasy;
-                Debug.Log("[Fart Raft] Skybox: " + fantasy.name);
-            }
-            else
-            {
-                var sky = LoadOrCreateMaterial(stagePrefix + "Sky", Shader.Find("Skybox/Procedural"));
-                if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", stage.skyTint);
-                if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", stage.skyGround);
-                if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.6f);
-                if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.05f);
-                if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.03f);
-                EditorUtility.SetDirty(sky);
-                RenderSettings.skybox = sky;
-                Debug.Log("[Fart Raft] Fantasy Skybox not found, using a procedural sky.");
-            }
-
+            RenderSettings.skybox = GradientSky();
             RenderSettings.sun = light;
-            RenderSettings.ambientMode = AmbientMode.Skybox;
-            // A painted sky is much brighter than the old flat sky. A high ambient washes the cliffs and water out to white.
-            RenderSettings.ambientIntensity = fantasy != null ? 0.38f : 0.85f;
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = Color.Lerp(stage.skyTint, Color.white, 0.35f) * 0.95f;
+            RenderSettings.ambientEquatorColor = stage.fog * 0.85f;
+            RenderSettings.ambientGroundColor = stage.skyGround * 0.6f;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = stage.fog;
-            RenderSettings.fogStartDistance = 90f;
-            RenderSettings.fogEndDistance = 280f;
+            RenderSettings.fogStartDistance = 80f;
+            RenderSettings.fogEndDistance = 260f;
         }
 
-        // Fantasy Skybox FREE. Sunless skies are preferred so the painted sun does not fight our light.
-        static Material FindFantasySkybox()
+        // Plain sky that fades from the stage color at the top to the haze color at the horizon.
+        static Material GradientSky()
         {
-            int index = 0;
-            for (int i = 0; i < Stages.Length; i++)
+            var shader = Shader.Find("Skybox/Panoramic");
+            if (shader == null)
             {
-                if (ReferenceEquals(Stages[i], stage)) index = i;
+                var procedural = LoadOrCreateMaterial(stagePrefix + "Sky", Shader.Find("Skybox/Procedural"));
+                if (procedural.HasProperty("_SkyTint")) procedural.SetColor("_SkyTint", stage.skyTint);
+                if (procedural.HasProperty("_GroundColor")) procedural.SetColor("_GroundColor", stage.fog);
+                if (procedural.HasProperty("_SunSize")) procedural.SetFloat("_SunSize", 0f);
+                EditorUtility.SetDirty(procedural);
+                return procedural;
             }
-            string[] names = index == 2
-                ? new[] { "FS002_Sunset_Sunless", "FS013_Sunset_Sunless", "FS017_Sunset_Sunless", "FS003_Sunset_Sunless", "FS002_Sunset" }
-                : index == 3
-                    ? new[] { "FS002_Snowy_Sunless", "FS013_Snowy_Sunless", "FS017_Snowy_Sunless", "FS003_Snowy_Sunless", "FS002_Snowy" }
-                    : index >= 4
-                        ? new[] { "FS002_Rainy_Sunless", "FS013_Rainy_Sunless", "FS017_Rainy_Sunless", "FS003_Rainy", "FS002_Day_Sunless" }
-                        : index == 1
-                            ? new[] { "FS013_Day_Sunless", "FS003_Day_Sunless", "FS017_Day_Sunless", "FS002_Day_Sunless", "FS013_Day" }
-                            : new[] { "FS002_Day_Sunless", "FS013_Day_Sunless", "FS000_Day_01_Sunless", "FS003_Day_Sunless", "FS002_Day", "FS000_Day_01" };
 
-            foreach (var name in names)
+            Color top = stage.skyTint;
+            Color horizon = stage.fog;
+            string path = GeneratedFolder + "/" + stagePrefix + "Sky.png";
+            const int height = 256;
+            var tex = new Texture2D(4, height, TextureFormat.RGBA32, false);
+            for (int y = 0; y < height; y++)
             {
-                foreach (var guid in AssetDatabase.FindAssets(name + " t:Material"))
-                {
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!path.EndsWith(".mat", System.StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!string.Equals(Path.GetFileNameWithoutExtension(path), name, System.StringComparison.OrdinalIgnoreCase)) continue;
-                    var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-                    if (mat == null || mat.shader == null) continue;
-                    if (!mat.shader.isSupported || mat.shader.name == "Hidden/InternalErrorShader") continue;
-                    return mat;
-                }
+                // v = 0 is straight down, 0.5 the horizon, 1 straight up.
+                float v = (y + 0.5f) / height;
+                float t = Mathf.Clamp01((v - 0.5f) / 0.45f);
+                Color c = v < 0.5f ? horizon : Color.Lerp(horizon, top, Mathf.SmoothStep(0f, 1f, Mathf.Pow(t, 0.7f)));
+                c.a = 1f;
+                for (int x = 0; x < 4; x++) tex.SetPixel(x, y, c);
             }
-            return null;
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                importer.npotScale = TextureImporterNPOTScale.None;
+                importer.mipmapEnabled = false;
+                importer.wrapModeU = TextureWrapMode.Repeat;
+                importer.wrapModeV = TextureWrapMode.Clamp;
+                importer.textureCompression = TextureImporterCompression.Uncompressed;
+                importer.SaveAndReimport();
+            }
+
+            var sky = LoadOrCreateMaterial(stagePrefix + "Sky", shader);
+            sky.SetTexture("_MainTex", AssetDatabase.LoadAssetAtPath<Texture2D>(path));
+            sky.SetFloat("_Mapping", 1f);
+            sky.EnableKeyword("_MAPPING_LATITUDE_LONGITUDE_LAYOUT");
+            sky.DisableKeyword("_MAPPING_6_FRAMES_LAYOUT");
+            sky.SetFloat("_ImageType", 0f);
+            sky.SetFloat("_Exposure", 1f);
+            sky.SetColor("_Tint", new Color(0.5f, 0.5f, 0.5f, 1f));
+            EditorUtility.SetDirty(sky);
+            return sky;
         }
 
         static void BuildEnvironment(Track tr, Transform parent, Mats m, System.Random random)
@@ -1423,7 +1561,7 @@ namespace FartRaft.EditorTools
             for (float x = -1.35f; x <= 1.36f; x += 0.45f)
             {
                 float chord = 2f * Mathf.Sqrt(Mathf.Max(0f, 1.75f * 1.75f - x * x));
-                Prim(PrimitiveType.Cube, "PlankLine", boat, new Vector3(x, 0.1f, 0f), new Vector3(0.04f, 0.02f, chord), m.darkWood, false);
+                Prim(PrimitiveType.Cube, "PlankLine", boat, new Vector3(x, 0.1f, 0f), new Vector3(0.04f, 0.02f, chord), m.raftLine, false);
             }
             for (int i = 0; i < 4; i++)
             {
@@ -1953,6 +2091,7 @@ namespace FartRaft.EditorTools
             // Stage colors; every stage gets its own copy of these materials.
             public readonly Material slideWater = WaterMaterial(stagePrefix + "SlideWater", WaterTexture(), stage.waterLight);
             public readonly Material slideBody = Lit(stagePrefix + "SlideBody", stage.slideBody, 0.3f);
+            public readonly Material rim = Lit(stagePrefix + "Rim", stage.rim, 0.2f);
             public readonly Material bumper = Lit(stagePrefix + "Bumper", stage.bumper, 0.3f);
             public readonly Material coral = Lit(stagePrefix + "Coral", stage.coral, 0.05f);
             public readonly Material coral2 = Lit(stagePrefix + "Coral2", stage.coral2, 0.05f);
@@ -1963,29 +2102,30 @@ namespace FartRaft.EditorTools
 
             public readonly Material foam = Lit("Foam", new Color(0.96f, 0.99f, 1f), 0.2f);
             public readonly Material spike = Lit("Spike", new Color(0.96f, 0.96f, 0.94f), 0.3f);
-            public readonly Material buoy = Lit("Buoy", new Color(1.00f, 0.48f, 0.15f), 0.35f);
-            public readonly Material magenta = Lit("Magenta", new Color(0.90f, 0.32f, 0.62f), 0.3f);
-            public readonly Material metal = Lit("Metal", new Color(0.70f, 0.72f, 0.78f), 0.5f);
-            public readonly Material wood = Lit("Wood", new Color(0.66f, 0.45f, 0.26f), 0.15f);
-            public readonly Material darkWood = Lit("DarkWood", new Color(0.45f, 0.29f, 0.16f), 0.15f);
+            public readonly Material buoy = Lit("Buoy", new Color(0.95f, 0.36f, 0.38f), 0.35f);
+            public readonly Material magenta = Lit("Magenta", new Color(0.72f, 0.38f, 0.82f), 0.3f);
+            public readonly Material metal = Lit("Metal", new Color(0.80f, 0.82f, 0.88f), 0.5f);
+            public readonly Material wood = Lit("Wood", new Color(0.82f, 0.60f, 0.40f), 0.15f);
+            public readonly Material darkWood = Lit("DarkWood", new Color(0.58f, 0.40f, 0.27f), 0.15f);
             public readonly Material bamboo = Lit("Bamboo", new Color(0.96f, 0.80f, 0.36f), 0.2f);
-            public readonly Material signBlue = Lit("SignBlue", new Color(0.18f, 0.45f, 0.85f), 0.3f);
-            public readonly Material signYellow = Lit("SignYellow", new Color(1.00f, 0.84f, 0.20f), 0.3f);
-            public readonly Material rock = Lit("Rock", new Color(0.42f, 0.41f, 0.43f), 0.05f);
-            public readonly Material rock2 = Lit("Rock2", new Color(0.33f, 0.33f, 0.36f), 0.05f);
-            public readonly Material trunk = Lit("Trunk", new Color(0.45f, 0.30f, 0.18f), 0.05f);
-            public readonly Material pine = Lit("Pine", new Color(0.18f, 0.50f, 0.32f), 0.05f);
-            public readonly Material bush = Lit("Bush", new Color(0.28f, 0.60f, 0.24f), 0.05f);
+            public readonly Material signBlue = Lit("SignBlue", new Color(0.36f, 0.56f, 0.95f), 0.3f);
+            public readonly Material signYellow = Lit("SignYellow", new Color(1.00f, 0.86f, 0.30f), 0.3f);
+            public readonly Material rock = Lit("Rock", new Color(0.52f, 0.52f, 0.56f), 0.05f);
+            public readonly Material rock2 = Lit("Rock2", new Color(0.43f, 0.43f, 0.48f), 0.05f);
+            public readonly Material trunk = Lit("Trunk", new Color(0.56f, 0.40f, 0.30f), 0.05f);
+            public readonly Material pine = Lit("Pine", new Color(0.26f, 0.60f, 0.42f), 0.05f);
+            public readonly Material bush = Lit("Bush", new Color(0.40f, 0.72f, 0.32f), 0.05f);
             public readonly Material mushroomCap = Lit("MushroomCap", new Color(0.90f, 0.20f, 0.20f), 0.3f);
             public readonly Material mushroomStem = Lit("MushroomStem", new Color(0.97f, 0.93f, 0.85f), 0.1f);
             public readonly Material cloud = Lit("Cloud", Color.white, 0f);
             public readonly Material white = Lit("White", Color.white, 0.3f);
             public readonly Material black = Lit("Black", new Color(0.05f, 0.05f, 0.06f), 0.5f);
             public readonly Material eyeWhite = Lit("EyeWhite", Color.white, 0.7f);
-            public readonly Material raftTube = Lit("RaftTube", new Color(1.00f, 0.62f, 0.38f), 0.45f);
-            public readonly Material raftBand = Lit("RaftBand", new Color(0.25f, 0.72f, 0.72f), 0.45f);
-            public readonly Material raftFloor = Lit("RaftFloor", new Color(0.78f, 0.58f, 0.35f), 0.1f);
-            public readonly Material strap = Lit("Strap", new Color(0.80f, 0.20f, 0.20f), 0.3f);
+            public readonly Material raftTube = Lit("RaftTube", new Color(0.99f, 0.93f, 0.82f), 0.45f);
+            public readonly Material raftBand = Lit("RaftBand", new Color(0.36f, 0.78f, 0.80f), 0.45f);
+            public readonly Material raftFloor = Lit("RaftFloor", new Color(0.60f, 0.84f, 0.52f), 0.1f);
+            public readonly Material raftLine = Lit("RaftLine", new Color(0.47f, 0.72f, 0.42f), 0.1f);
+            public readonly Material strap = Lit("Strap", new Color(0.90f, 0.30f, 0.30f), 0.3f);
             public readonly Material glove = Lit("Glove", new Color(0.92f, 0.12f, 0.12f), 0.55f);
             public readonly Material beansCan = Lit("BeansCan", new Color(0.95f, 0.42f, 0.10f), 0.4f);
             public readonly Material fish = Lit("Fish", new Color(0.45f, 0.66f, 0.92f), 0.6f);
@@ -2020,13 +2160,20 @@ namespace FartRaft.EditorTools
             return Shader.Find("Standard");
         }
 
+        // Matte cartoon look: low shine and no sky reflections, so colors stay clean instead of turning grey or plastic.
         static Material Lit(string name, Color color, float smoothness)
         {
             var mat = LoadOrCreateMaterial(name, LitShader());
+            smoothness = Mathf.Min(smoothness, 0.15f);
             mat.color = color;
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
             if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
+            if (mat.HasProperty("_EnvironmentReflections"))
+            {
+                mat.SetFloat("_EnvironmentReflections", 0f);
+                mat.EnableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+            }
             mat.enableInstancing = true;
             EditorUtility.SetDirty(mat);
             return mat;
@@ -2186,9 +2333,9 @@ namespace FartRaft.EditorTools
             AssetDatabase.CreateAsset(profile, GeneratedFolder + "/" + stagePrefix + "PostProcessing.asset");
 
             AddOverride(profile, "UnityEngine.Rendering.Universal.Tonemapping", ("mode", "Neutral"));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.2f), ("threshold", 1.15f), ("scatter", 0.55f));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.ColorAdjustments", ("postExposure", -0.15f), ("contrast", 6f), ("saturation", 16f));
-            AddOverride(profile, "UnityEngine.Rendering.Universal.Vignette", ("intensity", 0.18f), ("smoothness", 0.4f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Bloom", ("intensity", 0.15f), ("threshold", 1.2f), ("scatter", 0.55f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.ColorAdjustments", ("postExposure", 0.1f), ("contrast", 2f), ("saturation", 10f));
+            AddOverride(profile, "UnityEngine.Rendering.Universal.Vignette", ("intensity", 0.1f), ("smoothness", 0.5f));
             EditorUtility.SetDirty(profile);
 
             var volumeGo = new GameObject("PostProcessing");

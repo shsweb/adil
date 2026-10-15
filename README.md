@@ -74,6 +74,9 @@ folders before copying the new ones (removed scripts would otherwise stay behind
 
 ## Better graphics
 
+- **Clean pastel look** like Fart Together: every stage uses one soft color set (blue water, peach slide walls with a
+  round tube on top, purple spiky logs, pink canyon cliffs), matte materials, a plain gradient sky, soft light and a
+  light haze. The colors live in the `Stages` list at the top of `Editor/FartRaftBuilder.cs`.
 - **Fart Raft > 3. Upgrade Graphics To URP** installs the Universal Render Pipeline (click it again once the
   install finishes), switches the project to it and rebuilds the scene with bloom, tonemapping and color grading.
 - **Free Asset Store packs are picked up automatically.** Import any of these (Window > Package Manager > My Assets),
@@ -87,9 +90,7 @@ folders before copying the new ones (removed scripts would otherwise stay behind
     animals watching from the cliffs, and the jumping fish (herring).
   - [Low Poly Tropical Island Lite](https://assetstore.unity.com/packages/3d/environments/low-poly-tropical-island-lite-242437):
     palm trees, plants and rocks on the cliffs and in the lobby, plus a pier, tent, chest and barrels by the pool.
-  - [Fantasy Skybox FREE](https://assetstore.unity.com/packages/2d/textures-materials/sky/fantasy-skybox-free-18353):
-    a painted day sky for Sunny Slides and Jungle Rapids, and a sunset sky for Volcano Run. The lobby uses the same sky.
-  The Console shows how many models each stage found, which skybox was used, and whether the lobby found the tropical props.
+  The Console shows how many models each stage found and whether the lobby found the tropical props.
   Models are sized automatically, and Built-in materials are
   converted when the project uses URP (and the other way around). These packs are not part of this repo.
 - To choose models yourself, select `Assets/FartRaft/EnvironmentTheme` and drag prefabs into its lists; non-empty
