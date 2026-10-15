@@ -17,13 +17,16 @@ one round inflatable raft, and fart it down floating water slides high above the
 - Grab a floating **BEANS** can for 4 seconds of **MEGA FART** (much stronger farts and a full gas tank).
 - When **everyone farts at the same time** you get a **SYNC BOOST**.
 - Each fart drains your gas ring. If it empties, you're out until it refills.
-- **3 stages**, picked with the stage cards in the lobby; **NEXT STAGE** on the finish screen goes to the next one:
+- **5 stages**, picked with the stage cards in the lobby. Each card shows a little map of that course. **NEXT STAGE** on the finish screen goes to the next one:
   1. **Sunny Slides**: 4 slides and 4 pools, 7 checkpoints. Warm-up.
   2. **Jungle Rapids**: longer, with sliding blocks, more buoys and spinners. 6 checkpoints.
   3. **Volcano Run**: steepest and busiest, with pendulums, four-arm spinners and more open edges. 8 checkpoints.
+  4. **Ice World**: a slippery course. The raft keeps sliding after you let go.
+  5. **Sewer Splash**: a murky green course.
+  Every course has a yellow **jump ramp**. Go fast and the raft hops. Pull the joystick back to slow down and wait.
 - Your best time is saved per stage, mode and player count.
 - **Difficulty** (**SETTINGS > MODE** in the lobby, the choice is remembered):
-  - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer.
+  - **EASY**: the raft moves down the track by itself and always faces forward, so you only steer. Pull the joystick back to slow down and wait.
     Animals jump to the right spot instantly, farts are stronger, gas lasts longer, obstacles move slower
     and top speed is capped. The first spiky hit only bounces you (**OUCH!**); then the raft blinks for 2 s and passes through spiky things. Another hit within 4 seconds of the OUCH (after the blinking) kills.
   - **HARD**: the original physics - no auto-forward, the raft spins freely, one spiky hit kills.
@@ -31,9 +34,9 @@ one round inflatable raft, and fart it down floating water slides high above the
 - Real recorded fart sounds plus bump, crash, fall, checkpoint and finish sounds (all CC0, see `Audio/CREDITS.txt`).
 - **Lobby** (like Fart Together): the animals stand in a row on a wooden deck in a jungle clearing, with a pool, floats and a little raft behind them.
   - **SOLO**, **2**, **3** and **4** pick how many people play on this phone. Tapping **+ JOIN** on an empty spot does the same, and tapping the last player's tag removes them. The choice is saved.
-  - **< >** under each animal picks the character (capy, penguin, croc, gorilla). Each animal has its own fart pitch
+  - **< >** under each animal picks the character (capy, penguin, croc, gorilla, hippo). Each animal has its own fart pitch
     and fart cloud color, farts now and then while waiting and dances when picked. Picks are saved.
-  - **CHOOSE STAGE** cards along the bottom (Ice World and Sewer Splash are marked *coming soon*), **PLAY!** bottom right.
+  - **CHOOSE STAGE** cards along the bottom show a map of each course, **PLAY!** bottom right.
   - **SETTINGS**: mode Easy/Hard, music on/off, sound on/off.
 - **Music**: a happy lobby song and one song per stage (CC0, see `Audio/Music/CREDITS.txt`). It speeds up a little
   near the finish and stops when you cross the line.

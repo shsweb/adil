@@ -135,7 +135,7 @@ namespace FartRaft.EditorTools
             manager.stageIndex = index;
             manager.stageNames = Stages.Select(st => st.name).ToArray();
             manager.lobbyMusic = LoadMusic("music_lobby");
-            manager.raceMusic = LoadMusic("music_stage" + (index + 1));
+            manager.raceMusic = StageMusic(index);
             BuildLobby(m, random, manager);
 
             BuildUI(manager, seats);
@@ -237,6 +237,7 @@ namespace FartRaft.EditorTools
             public int[] checkpoints;
             public int finishSegment;
             public System.Action<Transform, Mats, Track, System.Random> obstacles;
+            public float drag = 0.18f;
 
             public Color slideBody, bumper, coral, coral2, coral3, grass, leaves, leaves2;
             public Color waterDeep, waterLight;
@@ -382,6 +383,81 @@ namespace FartRaft.EditorTools
                 fog = new Color(0.85f, 0.52f, 0.42f),
                 ambient = new Color(1f, 0.78f, 0.66f),
                 sun = new Color(1f, 0.78f, 0.58f),
+            },
+            new Stage
+            {
+                name = "ICE WORLD",
+                waypoints = new[]
+                {
+                    new Waypoint(0f, 58f, -12f, 14f),
+                    new Waypoint(0f, 57.5f, 18f, 14f),
+                    new Waypoint(14f, 49f, 50f, 11f),
+                    new Waypoint(6f, 48.4f, 82f, 16f),
+                    new Waypoint(-10f, 40f, 112f, 10f),
+                    new Waypoint(-18f, 32f, 144f, 10f),
+                    new Waypoint(-6f, 31.4f, 176f, 16f),
+                    new Waypoint(8f, 24f, 208f, 11f),
+                    new Waypoint(4f, 16f, 240f, 11f),
+                    new Waypoint(0f, 15.4f, 272f, 16f),
+                },
+                left = "RBBOROBBR",
+                right = "RBORBBOBR",
+                checkpoints = new[] { 2, 4, 6, 7 },
+                finishSegment = 8,
+                obstacles = IceObstacles,
+                drag = 0.04f,
+                slideBody = new Color(0.75f, 0.88f, 0.95f),
+                bumper = new Color(0.35f, 0.55f, 0.95f),
+                coral = new Color(0.82f, 0.88f, 0.94f),
+                coral2 = new Color(0.7f, 0.8f, 0.9f),
+                coral3 = new Color(0.62f, 0.74f, 0.86f),
+                grass = new Color(0.92f, 0.96f, 1f),
+                leaves = new Color(0.45f, 0.62f, 0.72f),
+                leaves2 = new Color(0.7f, 0.82f, 0.9f),
+                waterDeep = new Color(0.15f, 0.45f, 0.85f),
+                waterLight = new Color(0.7f, 0.88f, 1f),
+                skyTint = new Color(0.62f, 0.78f, 0.95f),
+                skyGround = new Color(0.75f, 0.85f, 0.95f),
+                fog = new Color(0.75f, 0.86f, 0.95f),
+                ambient = new Color(0.8f, 0.88f, 1f),
+                sun = new Color(0.9f, 0.95f, 1f),
+            },
+            new Stage
+            {
+                name = "SEWER SPLASH",
+                waypoints = new[]
+                {
+                    new Waypoint(0f, 56f, -12f, 13f),
+                    new Waypoint(0f, 55.5f, 16f, 13f),
+                    new Waypoint(-12f, 47f, 46f, 10f),
+                    new Waypoint(-8f, 46.4f, 76f, 16f),
+                    new Waypoint(8f, 38f, 106f, 10f),
+                    new Waypoint(16f, 30f, 136f, 10f),
+                    new Waypoint(4f, 29.4f, 168f, 16f),
+                    new Waypoint(-10f, 22f, 198f, 11f),
+                    new Waypoint(-4f, 14f, 228f, 11f),
+                    new Waypoint(0f, 13.4f, 260f, 16f),
+                },
+                left = "RBBRBOBBR",
+                right = "RBBORBOBR",
+                checkpoints = new[] { 2, 4, 6, 7 },
+                finishSegment = 8,
+                obstacles = SewerObstacles,
+                slideBody = new Color(0.32f, 0.38f, 0.28f),
+                bumper = new Color(0.55f, 0.7f, 0.2f),
+                coral = new Color(0.42f, 0.4f, 0.32f),
+                coral2 = new Color(0.5f, 0.46f, 0.34f),
+                coral3 = new Color(0.34f, 0.32f, 0.26f),
+                grass = new Color(0.28f, 0.4f, 0.18f),
+                leaves = new Color(0.2f, 0.35f, 0.14f),
+                leaves2 = new Color(0.4f, 0.5f, 0.16f),
+                waterDeep = new Color(0.1f, 0.45f, 0.22f),
+                waterLight = new Color(0.45f, 0.75f, 0.35f),
+                skyTint = new Color(0.45f, 0.55f, 0.4f),
+                skyGround = new Color(0.3f, 0.36f, 0.28f),
+                fog = new Color(0.4f, 0.5f, 0.35f),
+                ambient = new Color(0.6f, 0.7f, 0.55f),
+                sun = new Color(0.85f, 0.95f, 0.7f),
             },
         };
 
@@ -547,6 +623,7 @@ namespace FartRaft.EditorTools
             BoxingGlove(obstacles, m, tr, tr.IndexAt(2, 0.50f), -1f, 0f);
             JumpingFish(obstacles, m, tr, tr.IndexAt(10, 0.50f), 0f);
             BeachBall(obstacles, m, tr, tr.IndexAt(11, 0.30f), 0f);
+            JumpRamp(obstacles, m, tr, tr.IndexAt(2, 0.55f));
         }
 
         static void JungleObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
@@ -588,6 +665,7 @@ namespace FartRaft.EditorTools
             JumpingFish(obstacles, m, tr, tr.IndexAt(10, 0.50f), 0f);
             JumpingFish(obstacles, m, tr, tr.IndexAt(14, 0.25f), 0.5f);
             BeachBall(obstacles, m, tr, tr.IndexAt(15, 0.30f), 0f);
+            JumpRamp(obstacles, m, tr, tr.IndexAt(2, 0.55f));
         }
 
         static void VolcanoObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
@@ -636,6 +714,42 @@ namespace FartRaft.EditorTools
             JumpingFish(obstacles, m, tr, tr.IndexAt(2, 0.55f), 0f);
             JumpingFish(obstacles, m, tr, tr.IndexAt(14, 0.25f), 0.3f);
             BeachBall(obstacles, m, tr, tr.IndexAt(15, 0.30f), 0f);
+            JumpRamp(obstacles, m, tr, tr.IndexAt(6, 0.45f));
+        }
+
+        static void IceObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
+        {
+            JumpRamp(obstacles, m, tr, tr.IndexAt(2, 0.6f));
+            Buoy(obstacles, m, tr, tr.IndexAt(3, 0.4f), -3f);
+            Buoy(obstacles, m, tr, tr.IndexAt(3, 0.7f), 3f);
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(4, 0.5f), 3.6f, 2, 40f);
+            PendulumArch(obstacles, m, tr, tr.IndexAt(5, 0.45f), 0f);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(6, 0.4f), 0f);
+            WaterRock(obstacles, m, tr, tr.IndexAt(6, 0.7f), -3f, random);
+            Beans(obstacles, m, tr, tr.IndexAt(1, 0.7f), 0f);
+            BoxingGlove(obstacles, m, tr, tr.IndexAt(7, 0.5f), 1f, 0.2f);
+        }
+
+        static void SewerObstacles(Transform obstacles, Mats m, Track tr, System.Random random)
+        {
+            JumpRamp(obstacles, m, tr, tr.IndexAt(2, 0.55f));
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(3, 0.4f), 0f);
+            SlidingBlock(obstacles, m, tr, tr.IndexAt(3, 0.75f), 0.5f);
+            Buoy(obstacles, m, tr, tr.IndexAt(4, 0.5f), 2f);
+            PendulumArch(obstacles, m, tr, tr.IndexAt(5, 0.4f), 0.2f);
+            CrossSpinner(obstacles, m, tr, tr.IndexAt(6, 0.5f), 4f, 3, 30f);
+            WaterRock(obstacles, m, tr, tr.IndexAt(6, 0.8f), 3f, random);
+            Beans(obstacles, m, tr, tr.IndexAt(1, 0.6f), 0f);
+            JumpingFish(obstacles, m, tr, tr.IndexAt(7, 0.5f), 0f);
+        }
+
+        static void JumpRamp(Transform parent, Mats m, Track tr, int sample)
+        {
+            Vector3 pos = tr.pos[sample] + Vector3.up * 0.4f;
+            var go = Prim(PrimitiveType.Cube, "JumpRamp", parent, pos, new Vector3(tr.width[sample] * 0.62f, 0.4f, 5.2f), m.signYellow, true);
+            go.transform.rotation = Quaternion.LookRotation(tr.forward[sample]) * Quaternion.Euler(-18f, 0f, 0f);
+            var ramp = go.AddComponent<JumpRamp>();
+            ramp.boost = 7.5f;
         }
 
         static void BuildSlide(Track tr, Transform parent, Mats m)
@@ -1029,9 +1143,13 @@ namespace FartRaft.EditorTools
             }
             string[] names = index == 2
                 ? new[] { "FS002_Sunset_Sunless", "FS013_Sunset_Sunless", "FS017_Sunset_Sunless", "FS003_Sunset_Sunless", "FS002_Sunset" }
-                : index == 1
-                    ? new[] { "FS013_Day_Sunless", "FS003_Day_Sunless", "FS017_Day_Sunless", "FS002_Day_Sunless", "FS013_Day" }
-                    : new[] { "FS002_Day_Sunless", "FS013_Day_Sunless", "FS000_Day_01_Sunless", "FS003_Day_Sunless", "FS002_Day", "FS000_Day_01" };
+                : index == 3
+                    ? new[] { "FS002_Snowy_Sunless", "FS013_Snowy_Sunless", "FS017_Snowy_Sunless", "FS003_Snowy_Sunless", "FS002_Snowy" }
+                    : index >= 4
+                        ? new[] { "FS002_Rainy_Sunless", "FS013_Rainy_Sunless", "FS017_Rainy_Sunless", "FS003_Rainy", "FS002_Day_Sunless" }
+                        : index == 1
+                            ? new[] { "FS013_Day_Sunless", "FS003_Day_Sunless", "FS017_Day_Sunless", "FS002_Day_Sunless", "FS013_Day" }
+                            : new[] { "FS002_Day_Sunless", "FS013_Day_Sunless", "FS000_Day_01_Sunless", "FS003_Day_Sunless", "FS002_Day", "FS000_Day_01" };
 
             foreach (var name in names)
             {
@@ -1232,6 +1350,7 @@ namespace FartRaft.EditorTools
             collider.convex = true;
             SetSlippery(collider);
             var raft = raftGo.AddComponent<Raft>();
+            raft.linearDrag = stage.drag;
 
             var visual = new GameObject("Visual").transform;
             visual.SetParent(raftGo.transform, false);
@@ -1407,6 +1526,8 @@ namespace FartRaft.EditorTools
             }
 
             float eyeY = index == 1 ? 1.2f : 1.16f;
+            root.gameObject.AddComponent<ButtWobble>();
+
             float eyeZ = index == 2 ? 0.26f : 0.3f;
             for (int s = -1; s <= 1; s += 2)
             {
@@ -1608,7 +1729,7 @@ namespace FartRaft.EditorTools
             manager.syncText = Label(hud, "SyncBoost", "SYNC BOOST!", 60, top, new Vector2(0f, -160f), new Vector2(800f, 90f));
             manager.syncText.color = new Color(0.7f, 1f, 0.2f);
             manager.messageText = Label(hud, "Message", "", 110, center, new Vector2(0f, 140f), new Vector2(1400f, 160f));
-            manager.hintText = Label(hud, "Hint", "Push your joystick where the raft should go - your animal runs to the other side and farts!",
+            manager.hintText = Label(hud, "Hint", "Push the stick where the raft should go. Pull it back to wait. Your animal runs to the other side and farts!",
                 28, new Vector2(0.5f, 0f), new Vector2(0f, 45f), new Vector2(1100f, 60f));
 
             Vector2[] anchors = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };

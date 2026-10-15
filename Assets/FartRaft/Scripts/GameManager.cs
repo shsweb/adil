@@ -445,10 +445,18 @@ namespace FartRaft
             float boost = (syncActive ? syncBoost : 1f) * (racing && Time.time < beansUntil ? beansBoost : 1f);
             foreach (var seat in seats) seat.BoostMultiplier = boost;
 
+            float braking = 0f;
             if (coursePath != null && coursePath.Length > 1)
             {
                 raft.TrackForward = CoursePath.FlatDirection(coursePath, Mathf.Max(progressIndex, 0), 6);
+                foreach (var seat in seats)
+                {
+                    if (!seat.gameObject.activeSelf || seat.PushDirection.sqrMagnitude < 0.01f) continue;
+                    if (Vector3.Dot(seat.PushDirection, raft.TrackForward) < -0.35f) braking += 1f;
+                }
             }
+            raft.holdBack = active > 0 ? braking / active : 0f;
+
         }
 
         void Update()

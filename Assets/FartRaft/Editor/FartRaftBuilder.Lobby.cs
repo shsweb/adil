@@ -1,3 +1,4 @@
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,7 +14,7 @@ namespace FartRaft.EditorTools
         const float LobbyCharacterScale = 1.45f;
         const float LobbySpacing = 2.4f;
 
-        static readonly string[] ComingSoonStages = { "ICE WORLD", "SEWER SPLASH" };
+        static readonly string[] ComingSoonStages = { };
 
         static Transform[] lobbySlots;
 
@@ -318,6 +319,15 @@ namespace FartRaft.EditorTools
                 title.color = real ? new Color(1f, 0.92f, 0.3f) : new Color(0.8f, 0.8f, 0.8f);
                 FitText(title, 16, 30);
                 Label(faceRt, "Number", real ? "STAGE " + (k + 1) : "COMING SOON", real ? 34 : 26, new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(cardW - 20f, 50f));
+                if (real)
+                {
+                    var map = UIObject("Map", faceRt);
+                    Place(map, center, new Vector2(0f, 8f), new Vector2(cardW - 28f, 78f));
+                    var raw = map.gameObject.AddComponent<RawImage>();
+                    raw.texture = StageMap(Stages[k]);
+                    raw.color = new Color(1f, 1f, 1f, 0.95f);
+                    raw.raycastTarget = false;
+                }
 
                 if (!real) continue;
                 var button = card.gameObject.AddComponent<Button>();
@@ -386,6 +396,69 @@ namespace FartRaft.EditorTools
             Label(box, "ModeHint", "EASY = raft goes by itself.  HARD = like the real game.", 26, center, new Vector2(0f, -215f), new Vector2(760f, 40f));
             manager.settingsCloseButton = MakeButton(box, "Close", "CLOSE", center, new Vector2(0f, -285f), new Vector2(360f, 100f), PlayerColors[2], 46);
             panel.gameObject.SetActive(false);
+        }
+
+        static AudioClip StageMusic(int index)
+        {
+            string name = "music_stage" + (index + 1);
+            if (AssetImporter.GetAtPath(AudioFolder + "/Music/" + name + ".ogg") == null)
+                name = "music_stage" + ((index % 3) + 1);
+            return LoadMusic(name);
+        }
+
+        static Texture2D StageMap(Stage st)
+        {
+            const int size = 96;
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+            foreach (var w in st.waypoints)
+            {
+                minX = Mathf.Min(minX, w.position.x);
+                maxX = Mathf.Max(maxX, w.position.x);
+                minZ = Mathf.Min(minZ, w.position.z);
+                maxZ = Mathf.Max(maxZ, w.position.z);
+            }
+            float span = Mathf.Max(maxX - minX, maxZ - minZ, 1f);
+            var pixels = new Color[size * size];
+            Color paper = new Color(0.12f, 0.14f, 0.18f, 0.35f);
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = paper;
+
+            Vector2 Plot(Vector3 p)
+            {
+                float u = (p.x - (minX + maxX) * 0.5f) / span + 0.5f;
+                float v = (p.z - (minZ + maxZ) * 0.5f) / span + 0.5f;
+                return new Vector2(u * (size - 8) + 4f, v * (size - 8) + 4f);
+            }
+            void Dot(int x, int y, Color color)
+            {
+                if (x < 0 || y < 0 || x >= size || y >= size) return;
+                pixels[y * size + x] = color;
+            }
+            void Stroke(Vector2 a, Vector2 b, Color color, int radius)
+            {
+                int steps = Mathf.CeilToInt(Vector2.Distance(a, b)) + 1;
+                for (int s = 0; s <= steps; s++)
+                {
+                    Vector2 p = Vector2.Lerp(a, b, s / (float)steps);
+                    for (int dy = -radius; dy <= radius; dy++)
+                        for (int dx = -radius; dx <= radius; dx++)
+                            if (dx * dx + dy * dy <= radius * radius) Dot(Mathf.RoundToInt(p.x + dx), Mathf.RoundToInt(p.y + dy), color);
+                }
+            }
+
+            for (int i = 1; i < st.waypoints.Length; i++)
+                Stroke(Plot(st.waypoints[i - 1].position), Plot(st.waypoints[i].position), new Color(0.45f, 0.85f, 1f, 1f), 3);
+            Stroke(Plot(st.waypoints[0].position), Plot(st.waypoints[0].position), new Color(0.4f, 0.95f, 0.4f, 1f), 5);
+            var end = st.waypoints[st.waypoints.Length - 1].position;
+            Stroke(Plot(end), Plot(end), new Color(1f, 0.35f, 0.4f, 1f), 5);
+
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.SetPixels(pixels);
+            tex.Apply();
+            string path = GeneratedFolder + "/" + st.name.Replace(" ", "") + "Map.png";
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
         static AudioClip LoadMusic(string name)

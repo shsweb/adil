@@ -55,6 +55,7 @@ namespace FartRaft
 
         public bool IsFarting { get; private set; }
         public bool WantsToFart { get; private set; }
+        public Vector3 PushDirection { get; private set; }
         public bool IsExhausted => exhausted;
         public float Gas01 => gas / maxGas;
         public int CharacterIndex { get; private set; } = -1;
@@ -194,6 +195,7 @@ namespace FartRaft
             if (!WantsToFart || raft == null)
             {
                 aligned = false;
+                PushDirection = Vector3.zero;
                 return;
             }
 
@@ -205,6 +207,7 @@ namespace FartRaft
 
             // The stick says where the raft should go; stand on the opposite side to push it there.
             Vector3 moveDirection = (right * stick.x + forward * stick.y).normalized;
+            PushDirection = moveDirection;
             Vector3 localOutward = raft.transform.InverseTransformDirection(-moveDirection);
             float targetAngle = Mathf.Atan2(localOutward.x, localOutward.z) * Mathf.Rad2Deg;
 

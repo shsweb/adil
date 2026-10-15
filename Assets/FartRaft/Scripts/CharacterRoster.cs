@@ -21,6 +21,7 @@ namespace FartRaft
             new Info { name = "PENGUIN", model = "Penguin", pitch = 1.25f, puff = new Color(0.6f, 0.9f, 1f) },
             new Info { name = "CROC", classic = 2, pitch = 0.9f, puff = new Color(0.4f, 0.9f, 0.35f) },
             new Info { name = "GORILLA", classic = 3, pitch = 0.75f, puff = new Color(0.8f, 1f, 0.3f) },
+            new Info { name = "HIPPO", classic = 1, pitch = 0.85f, puff = new Color(0.55f, 0.75f, 1f) },
         };
 
         static readonly int[] Defaults = { 0, 1, 2, 3 };

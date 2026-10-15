@@ -20,6 +20,8 @@ namespace FartRaft
         [Header("Easy-mode helpers (0 / off = original physics)")]
         [Tooltip("Constant push (m/s²) down the track, so players only need to steer.")]
         public float autoForward;
+        [Tooltip("0 = no brake. 1 = the players are all pulling back, so the raft waits.")]
+        public float holdBack;
         [Tooltip("Horizontal speed limit in m/s. 0 = no limit.")]
         public float maxSpeed;
         [Tooltip("Keep the raft facing down the track instead of spinning.")]
@@ -96,7 +98,9 @@ namespace FartRaft
             if (Grounded)
             {
                 Body.AddForce(-groundNormal * stickAcceleration, ForceMode.Acceleration);
-                if (autoForward > 0f) Body.AddForce(TrackForward * autoForward, ForceMode.Acceleration);
+                float drive = autoForward * (1f - Mathf.Clamp01(holdBack));
+                if (drive > 0f) Body.AddForce(TrackForward * drive, ForceMode.Acceleration);
+                if (holdBack > 0.05f) Body.AddForce(-TrackForward * holdBack * 12f, ForceMode.Acceleration);
                 if (sideDrag > 0f)
                 {
                     Vector3 side = flat - TrackForward * Vector3.Dot(flat, TrackForward);
