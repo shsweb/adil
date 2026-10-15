@@ -30,15 +30,15 @@ namespace FartRaft.EditorTools
                 {
                     BuildAnimal(root, m, info.classic, out skin.leftArm, out skin.rightArm);
                 }
+                else if (info.model == "Penguin")
+                {
+                    // The Gobkit file imports as one pink blob (broken shader and a bad size).
+                    // A built penguin is black, white and orange, so the slot is never empty or pink.
+                    BuildPenguin(root, m, out skin.leftArm, out skin.rightArm);
+                }
                 else if (SpawnCharacterModel(info.model, root, skin))
                 {
                     models++;
-                }
-                else if (info.model == "Penguin")
-                {
-                    // The Gobkit file's mesh is a few centimetres while its skeleton is huge, so the
-                    // fitted model lands off the deck. A built penguin always stands in the slot.
-                    BuildPenguin(root, m, out skin.leftArm, out skin.rightArm);
                 }
                 else
                 {

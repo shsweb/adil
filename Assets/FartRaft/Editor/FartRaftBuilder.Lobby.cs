@@ -418,7 +418,10 @@ namespace FartRaft.EditorTools
 
         static Texture2D StageMap(Stage st)
         {
-            const int size = 96;
+            // Wide, like the card. The course runs left (start) to right (finish)
+            // so a long slide is not squeezed into a lightning-bolt crack.
+            const int width = 240;
+            const int height = 84;
             float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
             foreach (var w in st.waypoints)
             {
@@ -427,21 +430,23 @@ namespace FartRaft.EditorTools
                 minZ = Mathf.Min(minZ, w.position.z);
                 maxZ = Mathf.Max(maxZ, w.position.z);
             }
-            float span = Mathf.Max(maxX - minX, maxZ - minZ, 1f);
-            var pixels = new Color[size * size];
-            Color paper = new Color(0.12f, 0.14f, 0.18f, 0.35f);
+            float spanZ = Mathf.Max(maxZ - minZ, 1f);
+            float midX = (minX + maxX) * 0.5f;
+            var pixels = new Color[width * height];
+            Color paper = Color.Lerp(st.skyTint, new Color(0.08f, 0.1f, 0.12f), 0.55f);
+            paper.a = 1f;
             for (int i = 0; i < pixels.Length; i++) pixels[i] = paper;
 
             Vector2 Plot(Vector3 p)
             {
-                float u = (p.x - (minX + maxX) * 0.5f) / span + 0.5f;
-                float v = (p.z - (minZ + maxZ) * 0.5f) / span + 0.5f;
-                return new Vector2(u * (size - 8) + 4f, v * (size - 8) + 4f);
+                float u = (p.z - minZ) / spanZ;
+                float v = 0.5f + (p.x - midX) / spanZ;
+                return new Vector2(6f + u * (width - 12f), 6f + v * (height - 12f));
             }
             void Dot(int x, int y, Color color)
             {
-                if (x < 0 || y < 0 || x >= size || y >= size) return;
-                pixels[y * size + x] = color;
+                if (x < 0 || y < 0 || x >= width || y >= height) return;
+                pixels[y * width + x] = color;
             }
             void Stroke(Vector2 a, Vector2 b, Color color, int radius)
             {
@@ -455,19 +460,35 @@ namespace FartRaft.EditorTools
                 }
             }
 
+            Color water = Color.Lerp(st.waterLight, Color.white, 0.35f);
+            water.a = 1f;
+            Color bank = new Color(water.r * 0.45f, water.g * 0.55f, water.b * 0.7f, 1f);
             for (int i = 1; i < st.waypoints.Length; i++)
-                Stroke(Plot(st.waypoints[i - 1].position), Plot(st.waypoints[i].position), new Color(0.45f, 0.85f, 1f, 1f), 3);
-            Stroke(Plot(st.waypoints[0].position), Plot(st.waypoints[0].position), new Color(0.4f, 0.95f, 0.4f, 1f), 5);
-            var end = st.waypoints[st.waypoints.Length - 1].position;
-            Stroke(Plot(end), Plot(end), new Color(1f, 0.35f, 0.4f, 1f), 5);
+            {
+                Vector2 a = Plot(st.waypoints[i - 1].position);
+                Vector2 b = Plot(st.waypoints[i].position);
+                Stroke(a, b, bank, 7);
+                Stroke(a, b, water, 4);
+            }
+            Stroke(Plot(st.waypoints[0].position), Plot(st.waypoints[0].position), new Color(0.25f, 0.9f, 0.35f, 1f), 6);
+            Stroke(Plot(st.waypoints[st.waypoints.Length - 1].position), Plot(st.waypoints[st.waypoints.Length - 1].position), new Color(0.95f, 0.25f, 0.3f, 1f), 6);
 
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
             tex.SetPixels(pixels);
             tex.Apply();
             string path = GeneratedFolder + "/" + st.name.Replace(" ", "") + "Map.png";
             File.WriteAllBytes(path, tex.EncodeToPNG());
             Object.DestroyImmediate(tex);
             AssetDatabase.ImportAsset(path);
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                importer.textureType = TextureImporterType.Default;
+                importer.npotScale = TextureImporterNPOTScale.None;
+                importer.mipmapEnabled = false;
+                importer.alphaIsTransparency = true;
+                importer.SaveAndReimport();
+            }
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
